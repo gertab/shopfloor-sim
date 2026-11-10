@@ -1,0 +1,16 @@
+# Build output
+target/
+node_modules/
+dist/
+.vite/
+src-tauri/gen/
+
+# Local recordings (jsonl sinks)
+recordings/
+
+# Local notes
+docs/
+NOTES.md
+ISSUES.md
+
+.DS_Store

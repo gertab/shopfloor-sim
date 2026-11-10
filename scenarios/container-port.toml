@@ -1,0 +1,457 @@
+# Container port: a 400×200 m terminal with a ship, quay cranes, a container yard and fast vehicles.
+#
+# Same simulator and file format as sample-floor.toml, on a floor twenty times wider.
+# Example consumer: Liminal, with config/examples/config_container_port_tcp.toml (Liminal repo).
+#
+# Layout, from the water down:
+#   - the ship, then the quay cranes (vehicles load under them, on the lane at y = 126);
+#   - upper yard blocks, serviced from y = 114;
+#   - lower yard blocks and the truck gate, serviced from the lane at y = 56.
+# Cross aisles run at x = 140, x = 260 and x = 385. Vehicles drive in straight lines and ignore what is
+# in the way, so scenes follow the lanes and aisles with waypoints. Docks sit well above the blocks so a
+# docked vehicle's label doesn't cover the block's.
+
+name = "Container port"
+
+[sim]
+tick_ms = 20
+seed = 11
+dock_tolerance_m = 5.0   # vehicles are metres long, so this is much larger than on an indoor floor
+
+[floor]
+width_m = 400.0
+height_m = 200.0
+grid_m = 20.0
+
+# --- Quay -------------------------------------------------------------------------------------
+
+[machines.vessel]
+label = "MV Aurora"
+position = [190.0, 185.0]
+size = [300.0, 28.0]
+sensors.draft = { label = "Draft", unit = "m", default = 11.2, range = [0.0, 20.0], period_ms = 5000 }
+
+[machines.crane_q1]
+label = "Crane Q1"
+position = [90.0, 150.0]
+size = [60.0, 32.0]
+dock = [90.0, 126.0]
+sensors.load = { kind = "crane_load", label = "Load", unit = "t", default = 0.0, range = [0.0, 65.0], period_ms = 1000 }
+sensors.hoist = { kind = "hoist_speed", label = "Hoist speed", unit = "m/s", default = 1.5, range = [0.0, 3.0], period_ms = 1000 }
+
+[machines.crane_q2]
+label = "Crane Q2"
+position = [190.0, 150.0]
+size = [60.0, 32.0]
+dock = [190.0, 126.0]
+sensors.load = { kind = "crane_load", label = "Load", unit = "t", default = 0.0, range = [0.0, 65.0], period_ms = 1000 }
+sensors.hoist = { kind = "hoist_speed", label = "Hoist speed", unit = "m/s", default = 1.5, range = [0.0, 3.0], period_ms = 1000 }
+
+[machines.crane_q3]
+label = "Crane Q3"
+position = [290.0, 150.0]
+size = [60.0, 32.0]
+dock = [290.0, 126.0]
+sensors.load = { kind = "crane_load", label = "Load", unit = "t", default = 0.0, range = [0.0, 65.0], period_ms = 1000 }
+sensors.hoist = { kind = "hoist_speed", label = "Hoist speed", unit = "m/s", default = 1.5, range = [0.0, 3.0], period_ms = 1000 }
+
+# --- Yard -------------------------------------------------------------------------------------
+
+[machines.block_a]
+label = "Block A"
+position = [80.0, 78.0]
+size = [100.0, 28.0]
+dock = [80.0, 114.0]
+sensors.fill = { label = "Fill level", unit = "%", default = 62.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[machines.block_b]
+label = "Block B"
+position = [200.0, 78.0]
+size = [100.0, 28.0]
+dock = [240.0, 114.0]    # off-centre, so a vehicle here doesn't crowd the one under crane Q2
+sensors.fill = { label = "Fill level", unit = "%", default = 48.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[machines.block_c]
+label = "Block C"
+position = [320.0, 78.0]
+size = [100.0, 28.0]
+dock = [340.0, 114.0]    # off-centre, so a vehicle here doesn't crowd the one under crane Q3
+sensors.fill = { label = "Fill level", unit = "%", default = 71.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[machines.block_d]
+label = "Block D"
+position = [80.0, 20.0]
+size = [100.0, 28.0]
+dock = [80.0, 56.0]
+sensors.fill = { label = "Fill level", unit = "%", default = 55.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[machines.block_e]
+label = "Block E (freezers)"
+position = [200.0, 20.0]
+size = [100.0, 28.0]
+dock = [200.0, 56.0]
+sensors.fill = { label = "Fill level", unit = "%", default = 40.0, range = [0.0, 100.0], period_ms = 5000 }
+sensors.freezer = { kind = "freezer_temp", label = "Freezer temperature", unit = "°C", default = -18.0, range = [-30.0, 20.0], period_ms = 2000, noise_std = 0.1 }
+
+[machines.gate]
+label = "Truck gate"
+position = [320.0, 20.0]
+size = [100.0, 28.0]
+dock = [320.0, 56.0]
+sensors.queue = { kind = "truck_queue", label = "Trucks queueing", unit = "trucks", default = 4.0, range = [0.0, 60.0], period_ms = 2000 }
+
+# --- Vehicles ---------------------------------------------------------------------------------
+
+[mobile_manipulators.agv1]
+label = "AGV 1"
+start_at = "crane_q1"
+max_speed_mps = 8.0
+radius_m = 6.0
+sensors.battery = { label = "Battery", unit = "%", default = 86.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[mobile_manipulators.agv2]
+label = "AGV 2"
+start_at = "crane_q2"
+max_speed_mps = 8.0
+radius_m = 6.0
+sensors.battery = { label = "Battery", unit = "%", default = 64.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[mobile_manipulators.agv3]
+label = "AGV 3"
+start_at = "crane_q3"
+max_speed_mps = 8.0
+radius_m = 6.0
+sensors.battery = { label = "Battery", unit = "%", default = 91.0, range = [0.0, 100.0], period_ms = 5000 }
+
+[mobile_manipulators.straddle]
+label = "Straddle carrier"
+start_at = "block_b"
+max_speed_mps = 10.0
+radius_m = 5.0
+sensors.fuel = { label = "Fuel", unit = "%", default = 73.0, range = [0.0, 100.0], period_ms = 5000 }
+
+# --- Free-standing sensors --------------------------------------------------------------------
+
+[sensors.wind]
+label = "Wind speed"
+position = [375.0, 185.0]
+kind = "wind_speed"
+unit = "m/s"
+default = 6.0
+range = [0.0, 45.0]
+period_ms = 1000
+noise_std = 0.4
+
+[sensors.tide]
+label = "Tide level"
+position = [20.0, 185.0]
+kind = "tide_level"
+unit = "m"
+default = 1.2
+range = [-1.0, 4.0]
+period_ms = 5000
+
+# --- Actions ----------------------------------------------------------------------------------
+
+[actions.load]
+label = "Load container"
+requires_machine = true
+
+[actions.unload]
+label = "Unload container"
+requires_machine = true
+
+# --- Scenes -----------------------------------------------------------------------------------
+
+# Normal operations: three AGVs carry containers from the cranes to the yard and the gate, while the
+# straddle carrier moves containers between yard blocks.
+[scenes.container_flow]
+label = "Container flow"
+loop = true
+
+[[scenes.container_flow.tracks]]
+name = "AGV 1: crane Q1 to block D"
+steps = [
+  { set_sensor = { sensor = "crane_q1.load", value = 28.0 } },
+  { perform = { mm = "agv1", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q1.load", value = 0.0 } },
+  { move_to = { mm = "agv1", point = [140.0, 126.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", point = [140.0, 56.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", machine = "block_d" } },
+  { wait_idle = "agv1" },
+  { perform = { mm = "agv1", action = "unload" } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv1", point = [140.0, 56.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", point = [140.0, 126.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", machine = "crane_q1" } },
+  { wait_idle = "agv1" },
+]
+
+[[scenes.container_flow.tracks]]
+name = "AGV 2: crane Q2 to block E"
+steps = [
+  { set_sensor = { sensor = "crane_q2.load", value = 22.0 } },
+  { perform = { mm = "agv2", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q2.load", value = 0.0 } },
+  { move_to = { mm = "agv2", point = [260.0, 126.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", point = [260.0, 56.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", machine = "block_e" } },
+  { wait_idle = "agv2" },
+  { perform = { mm = "agv2", action = "unload" } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv2", point = [260.0, 56.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", point = [260.0, 126.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", machine = "crane_q2" } },
+  { wait_idle = "agv2" },
+]
+
+[[scenes.container_flow.tracks]]
+name = "AGV 3: crane Q3 to the gate"
+steps = [
+  { set_sensor = { sensor = "crane_q3.load", value = 31.0 } },
+  { perform = { mm = "agv3", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q3.load", value = 0.0 } },
+  { move_to = { mm = "agv3", point = [385.0, 126.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", point = [385.0, 56.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", machine = "gate" } },
+  { wait_idle = "agv3" },
+  { perform = { mm = "agv3", action = "unload" } },
+  { set_sensor = { sensor = "gate.queue", value = 3.0 } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv3", point = [385.0, 56.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", point = [385.0, 126.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", machine = "crane_q3" } },
+  { wait_idle = "agv3" },
+  { set_sensor = { sensor = "gate.queue", value = 4.0 } },
+]
+
+[[scenes.container_flow.tracks]]
+name = "straddle carrier: block B to block C and back, twice"
+steps = [
+  { perform = { mm = "straddle", action = "load" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_c" } },
+  { wait_idle = "straddle" },
+  { perform = { mm = "straddle", action = "unload" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_b" } },
+  { wait_idle = "straddle" },
+  { perform = { mm = "straddle", action = "load" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_c" } },
+  { wait_idle = "straddle" },
+  { perform = { mm = "straddle", action = "unload" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_b" } },
+  { wait_idle = "straddle" },
+]
+
+# The wind builds and passes 20 m/s at 20 s, so the cranes stop. The AGVs finish what they carry and
+# queue under the cranes, and trucks back up at the gate. It drops below 20 m/s at 55 s, the cranes
+# restart at 60 s and work resumes. Tracks can't react to each other, so their times are worked out
+# from the vehicles' speeds and distances.
+[scenes.high_wind]
+label = "High wind stops the cranes"
+
+[[scenes.high_wind.tracks]]
+name = "wind"
+steps = [
+  { wait_ms = 5000 },     # 5 s
+  { set_sensor = { sensor = "wind", value = 11.0 } },
+  { wait_ms = 5000 },     # 10 s: gusty from here on
+  { set_sensor = { sensor = "wind", value = 15.0 } },
+  { set_sensor_noise = { sensor = "wind", std = 1.2 } },
+  { wait_ms = 5000 },     # 15 s
+  { set_sensor = { sensor = "wind", value = 18.0 } },
+  { wait_ms = 5000 },     # 20 s
+  { set_sensor = { sensor = "wind", value = 24.0 } },
+  { wait_ms = 15000 },    # 35 s
+  { set_sensor = { sensor = "wind", value = 28.0 } },
+  { wait_ms = 15000 },    # 50 s
+  { set_sensor = { sensor = "wind", value = 23.0 } },
+  { wait_ms = 5000 },     # 55 s
+  { set_sensor = { sensor = "wind", value = 16.0 } },
+  { wait_ms = 5000 },     # 60 s
+  { set_sensor = { sensor = "wind", value = 11.0 } },
+  { set_sensor_noise = { sensor = "wind", std = 0.4 } },
+  { wait_ms = 5000 },     # 65 s
+  { set_sensor = { sensor = "wind", value = 6.0 } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "cranes stop and restart"
+steps = [
+  { wait_ms = 20000 },    # 20 s
+  { set_sensor = { sensor = "crane_q1.hoist", value = 0.0 } },
+  { set_sensor = { sensor = "crane_q2.hoist", value = 0.0 } },
+  { set_sensor = { sensor = "crane_q3.hoist", value = 0.0 } },
+  { wait_ms = 40000 },    # 60 s
+  { set_sensor = { sensor = "crane_q1.hoist", value = 1.5 } },
+  { set_sensor = { sensor = "crane_q2.hoist", value = 1.5 } },
+  { set_sensor = { sensor = "crane_q3.hoist", value = 1.5 } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "trucks back up at the gate"
+steps = [
+  { wait_ms = 25000 },    # 25 s
+  { set_sensor = { sensor = "gate.queue", value = 9.0 } },
+  { wait_ms = 10000 },    # 35 s
+  { set_sensor = { sensor = "gate.queue", value = 15.0 } },
+  { wait_ms = 10000 },    # 45 s
+  { set_sensor = { sensor = "gate.queue", value = 22.0 } },
+  { wait_ms = 10000 },    # 55 s
+  { set_sensor = { sensor = "gate.queue", value = 28.0 } },
+  { wait_ms = 10000 },    # 65 s
+  { set_sensor = { sensor = "gate.queue", value = 20.0 } },
+  { wait_ms = 10000 },    # 75 s
+  { set_sensor = { sensor = "gate.queue", value = 11.0 } },
+  { wait_ms = 10000 },    # 85 s
+  { set_sensor = { sensor = "gate.queue", value = 4.0 } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "AGV 1: one delivery, queue at crane Q1, one more"
+steps = [
+  { set_sensor = { sensor = "crane_q1.load", value = 28.0 } },
+  { perform = { mm = "agv1", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q1.load", value = 0.0 } },
+  { move_to = { mm = "agv1", point = [140.0, 126.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", point = [140.0, 56.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", machine = "block_d" } },
+  { wait_idle = "agv1" },
+  { perform = { mm = "agv1", action = "unload" } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv1", point = [140.0, 56.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", point = [140.0, 126.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", machine = "crane_q1" } },
+  { wait_idle = "agv1" },
+  { wait_ms = 7000 },     # back at 53 s, waits until the crane restarts
+  { set_sensor = { sensor = "crane_q1.load", value = 28.0 } },
+  { perform = { mm = "agv1", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q1.load", value = 0.0 } },
+  { move_to = { mm = "agv1", point = [140.0, 126.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", point = [140.0, 56.0] } },
+  { wait_idle = "agv1" },
+  { move_to = { mm = "agv1", machine = "block_d" } },
+  { wait_idle = "agv1" },
+  { perform = { mm = "agv1", action = "unload" } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "AGV 2: one delivery, queue at crane Q2, one more"
+steps = [
+  { set_sensor = { sensor = "crane_q2.load", value = 22.0 } },
+  { perform = { mm = "agv2", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q2.load", value = 0.0 } },
+  { move_to = { mm = "agv2", point = [260.0, 126.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", point = [260.0, 56.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", machine = "block_e" } },
+  { wait_idle = "agv2" },
+  { perform = { mm = "agv2", action = "unload" } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv2", point = [260.0, 56.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", point = [260.0, 126.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", machine = "crane_q2" } },
+  { wait_idle = "agv2" },
+  { wait_ms = 3000 },     # back at 58 s, waits until the crane restarts
+  { set_sensor = { sensor = "crane_q2.load", value = 22.0 } },
+  { perform = { mm = "agv2", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q2.load", value = 0.0 } },
+  { move_to = { mm = "agv2", point = [260.0, 126.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", point = [260.0, 56.0] } },
+  { wait_idle = "agv2" },
+  { move_to = { mm = "agv2", machine = "block_e" } },
+  { wait_idle = "agv2" },
+  { perform = { mm = "agv2", action = "unload" } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "AGV 3: a short delivery, a long queue at crane Q3, then to the gate"
+steps = [
+  { set_sensor = { sensor = "crane_q3.load", value = 31.0 } },
+  { perform = { mm = "agv3", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q3.load", value = 0.0 } },
+  { move_to = { mm = "agv3", machine = "block_c" } },
+  { wait_idle = "agv3" },
+  { perform = { mm = "agv3", action = "unload" } },
+  { wait_ms = 4000 },
+  { move_to = { mm = "agv3", machine = "crane_q3" } },
+  { wait_idle = "agv3" },
+  { wait_ms = 41000 },    # back at 21 s, waits until the crane restarts
+  { set_sensor = { sensor = "crane_q3.load", value = 31.0 } },
+  { perform = { mm = "agv3", action = "load" } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "crane_q3.load", value = 0.0 } },
+  { move_to = { mm = "agv3", point = [385.0, 126.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", point = [385.0, 56.0] } },
+  { wait_idle = "agv3" },
+  { move_to = { mm = "agv3", machine = "gate" } },
+  { wait_idle = "agv3" },
+  { perform = { mm = "agv3", action = "unload" } },
+]
+
+[[scenes.high_wind.tracks]]
+name = "straddle carrier: parks during the worst of it"
+steps = [
+  { perform = { mm = "straddle", action = "load" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_c" } },
+  { wait_idle = "straddle" },
+  { perform = { mm = "straddle", action = "unload" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_b" } },
+  { wait_idle = "straddle" },
+  { wait_ms = 32000 },    # back at 30 s, waits until 62 s
+  { perform = { mm = "straddle", action = "load" } },
+  { wait_ms = 5000 },
+  { move_to = { mm = "straddle", machine = "block_c" } },
+  { wait_idle = "straddle" },
+  { perform = { mm = "straddle", action = "unload" } },
+]
+
+# --- Output -----------------------------------------------------------------------------------
+
+[output]
+position_interval_ms = 200   # less often than indoors: at 8 m/s this is still a report every 1.6 m
+
+# Every event as one JSON line on stdout (the terminal running the app).
+[output.sinks.terminal]
+type = "stdout"
+
+# Stream every event over TCP to each client that connects (e.g. Liminal).
+# Only one process can listen on a port at a time.
+[output.sinks.tcp]
+type = "tcp"
+bind = "127.0.0.1:9000"

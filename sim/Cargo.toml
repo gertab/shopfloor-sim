@@ -1,0 +1,18 @@
+[package]
+name = "shopfloor-sim"
+description = "Shopfloor simulation engine: scenario model, motion, sensors, event stream"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rand.workspace = true
+rand_distr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

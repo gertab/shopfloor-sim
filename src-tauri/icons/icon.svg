@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <!--
+    Source of the app icons. To regenerate them, from shopfloor/: run
+    `npx tauri icon src-tauri/icons/icon.svg -o /tmp/icons`, then copy the five files that
+    tauri.conf.json lists from there into this folder. The command also makes mobile and store icons we don't use.
+    Then touch src-tauri/src/main.rs: Cargo doesn't notice icon changes and would keep the old icon in the build.
+  -->
+  <rect x="46" y="46" width="420" height="420" rx="98" fill="#1c1910" stroke="#100e08" stroke-width="12"/>
+  <g transform="translate(-14 0)">
+    <!-- Arm, from the base to the wrist. -->
+    <path d="M214 306 L164 190 L340 152" fill="none" stroke="#f2b84b" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Gripper. -->
+    <path d="M418 104 H352 V196 H418" fill="none" stroke="#f2b84b" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Elbow joint. -->
+    <circle cx="164" cy="190" r="31" fill="#1c1910" stroke="#f2b84b" stroke-width="24"/>
+    <!-- Base. -->
+    <rect x="118" y="296" width="282" height="72" rx="22" fill="#f2b84b"/>
+    <!-- Wheels, cut out of the base by a dark gap so they stay separate at small sizes. -->
+    <circle cx="180" cy="378" r="48" fill="#1c1910"/>
+    <circle cx="338" cy="378" r="48" fill="#1c1910"/>
+    <circle cx="180" cy="378" r="37" fill="#f2b84b"/>
+    <circle cx="338" cy="378" r="37" fill="#f2b84b"/>
+    <circle cx="180" cy="378" r="13" fill="#1c1910"/>
+    <circle cx="338" cy="378" r="13" fill="#1c1910"/>
+  </g>
+</svg>

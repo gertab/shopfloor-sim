@@ -1,0 +1,45 @@
+# The smallest useful shopfloor: one mobile manipulator, one machine with one sensor, one action and
+# one scene. Everything else uses the defaults; see sample-floor.toml for the other options.
+
+name = "Basic floor"
+
+[sim]
+dock_tolerance_m = 0.5
+
+[floor]
+width_m = 10.0
+height_m = 6.0
+
+[machines.machine]
+label = "Machine"
+position = [6.0, 4.0]
+size = [3.0, 2.0]
+
+[machines.machine.sensors.temperature]
+unit = "°C"
+default = 40.0
+range = [0.0, 100.0]
+
+[mobile_manipulators.mm]
+label = "MM"
+start = [2.0, 2.5]
+max_speed_mps = 2.0
+
+[actions.pick]
+requires_machine = true
+
+# The MM goes to the machine and picks. The machine heats up for 3 s, then the MM goes back.
+[scenes.visit_machine]
+label = "Visit the machine"
+
+[[scenes.visit_machine.tracks]]
+steps = [
+  { move_to = { mm = "mm", machine = "machine" } },
+  { wait_idle = "mm" },
+  { perform = { mm = "mm", action = "pick" } },
+  { set_sensor = { sensor = "machine.temperature", value = 60.0 } },
+  { wait_ms = 3000 },
+  { set_sensor = { sensor = "machine.temperature", value = 40.0 } },
+  { move_to = { mm = "mm", point = [2.0, 2.5] } },
+  { wait_idle = "mm" },
+]

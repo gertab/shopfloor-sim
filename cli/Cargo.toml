@@ -1,0 +1,17 @@
+[package]
+name = "shopfloor-cli"
+description = "Run shopfloor scenarios and scenes without the GUI"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "shopfloor"
+path = "src/main.rs"
+
+[dependencies]
+shopfloor-sim = { path = "../sim" }
+anyhow.workspace = true
+clap = { version = "4.5", features = ["derive"] }
+tokio = { workspace = true, features = ["signal"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
