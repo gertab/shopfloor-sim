@@ -51,8 +51,8 @@ enum Command {
         /// Also write every event to this JSONL file (overwritten).
         #[arg(long, value_name = "PATH")]
         jsonl: Option<PathBuf>,
-        /// Also stream every event over TCP on this address, e.g. 127.0.0.1:9000 (where a consumer
-        /// such as Liminal's `tcp_input` connects). Ignored with --fast.
+        /// Also stream every event over TCP on this address, e.g. 127.0.0.1:9000 (where consumers
+        /// connect). Ignored with --fast.
         #[arg(long, value_name = "ADDR")]
         tcp: Option<String>,
     },

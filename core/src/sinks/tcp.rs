@@ -1,8 +1,8 @@
-//! Streams events to TCP clients (e.g. Liminal's `tcp_input` in client mode).
+//! Streams events to TCP clients.
 //!
 //! Each event is one frame: a 4-byte big-endian length followed by the event's JSON. A batch is
-//! sent with a single `write_all` per client so frames arrive whole (some readers, such as
-//! Liminal's `tcp_input`, are sensitive to frames split across their read timeout).
+//! sent with a single `write_all` per client so frames arrive whole (some readers are
+//! sensitive to frames split across their read timeout).
 
 use super::{EventSink, SinkMonitor, to_json_line};
 use crate::event::SimEvent;

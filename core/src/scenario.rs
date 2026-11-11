@@ -170,7 +170,7 @@ pub enum SinkKind {
         append: bool,
     },
     /// Listen on `bind` (e.g. `127.0.0.1:9000`) and stream every event to each connected client
-    /// as a length-prefixed JSON frame (what consumers such as Liminal's `tcp_input` read).
+    /// as a length-prefixed JSON frame.
     Tcp { bind: String },
 }
 

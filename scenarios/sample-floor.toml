@@ -254,8 +254,7 @@ position_interval_ms = 100   # moving MMs report their position this often
 [output.sinks.terminal]
 type = "stdout"
 
-# Stream every event over TCP to each client that connects, e.g. Liminal's `tcp_input`
-# (mode = "client"), as in config/examples/config_shopfloor_vibr_tcp.toml in the Liminal repo.
+# Stream every event over TCP to each client that connects (see "Streaming over TCP" in the README).
 # Only one process can listen on a port at a time.
 [output.sinks.tcp]
 type = "tcp"

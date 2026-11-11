@@ -1,4 +1,4 @@
-/* Dark theme with the teal accent of the Liminal GUI (its gui/src/styles.css). */
+/* Dark theme with a teal accent. */
 :root {
   --bg: #090d0f;
   --bg-elevated: #10171a;
@@ -240,7 +240,7 @@ h3 {
   font-size: 11px;
 }
 
-/* TCP sinks: a dot that lights up while a client (e.g. Liminal) is connected. */
+/* TCP sinks: a dot that lights up while a client is connected. */
 .sink-dot {
   width: 6px;
   height: 6px;

@@ -1,7 +1,6 @@
 # Container port: a 400×200 m terminal with a ship, quay cranes, a container yard and fast vehicles.
 #
 # Same simulator and file format as sample-floor.toml, on a floor twenty times wider.
-# Example consumer: Liminal, with config/examples/config_container_port_tcp.toml (Liminal repo).
 #
 # Layout, from the water down:
 #   - the ship, then the quay cranes (vehicles load under them, on the lane at y = 126);
@@ -450,7 +449,7 @@ position_interval_ms = 200   # less often than indoors: at 8 m/s this is still a
 [output.sinks.terminal]
 type = "stdout"
 
-# Stream every event over TCP to each client that connects (e.g. Liminal).
+# Stream every event over TCP to each client that connects.
 # Only one process can listen on a port at a time.
 [output.sinks.tcp]
 type = "tcp"
