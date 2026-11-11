@@ -1,0 +1,30 @@
+[package]
+name = "shopfloor-core"
+description = "Shopfloor simulation engine (scenario model, motion, sensors, event stream) and the headless `shopfloor` command"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["cli"]
+# The `shopfloor` binary. The GUI turns it off so it doesn't build clap.
+cli = ["dep:clap", "dep:tracing-subscriber", "tokio/signal"]
+
+[[bin]]
+name = "shopfloor"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[dependencies]
+anyhow.workspace = true
+rand.workspace = true
+rand_distr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+clap = { version = "4.5", features = ["derive"], optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

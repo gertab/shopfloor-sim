@@ -1,4 +1,4 @@
-<img src="src-tauri/icons/128x128@2x.png" alt="Shopfloor Simulator icon: a mobile manipulator" width="96" height="96">
+<img src="gui/src-tauri/icons/128x128@2x.png" alt="Shopfloor Simulator icon: a mobile manipulator" width="96" height="96">
 
 # Shopfloor Simulator
 
@@ -21,10 +21,12 @@ program that connects, such as a stream processor (see [Streaming over TCP](#str
 ## Run it
 
 ```bash
+cd gui
 npm install                 # once
 npm run tauri dev           # Vite on 127.0.0.1:5174 + the app window
 ```
 
+- The app's npm project is `gui/`, so run `npm` commands there.
 - The app opens [scenarios/sample-floor.toml](scenarios/sample-floor.toml). Scenario files live in `scenarios/`.
 - It uses port **5174**, so it can run at the same time as an app on Vite's default port (5173), such as the Liminal
   GUI.
@@ -38,11 +40,11 @@ The `shopfloor` command-line tool runs a scenario, and optionally one of its sce
 scenario's `[output.sinks]`, and logs go to stderr.
 
 ```bash
-cargo run -p shopfloor-cli -- check scenarios/sample-floor.toml                         # validate + list contents
-cargo run -p shopfloor-cli -- run scenarios/sample-floor.toml --scene production        # real time, until Ctrl+C
-cargo run -p shopfloor-cli -- run scenarios/sample-floor.toml --scene vibration_fault   # ends when the scene ends
-cargo run -p shopfloor-cli -- run scenarios/sample-floor.toml --scene production \
-    --fast --duration 600 --jsonl recordings/production.jsonl            # 10 min of data in < 1 s
+cargo run --bin shopfloor -- check scenarios/sample-floor.toml                         # validate + list contents
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production        # real time, until Ctrl+C
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene vibration_fault   # ends when the scene ends
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production \
+    --fast --duration 600 --jsonl recordings/production.jsonl           # 10 min of data in < 1 s
 ```
 
 | Option | Meaning |
@@ -54,14 +56,14 @@ cargo run -p shopfloor-cli -- run scenarios/sample-floor.toml --scene production
 | `--tcp ADDR` | Also stream every event over TCP on this address, e.g. `127.0.0.1:9000`. TCP outputs are skipped with `--fast`. |
 
 Without `--scene` or `--duration`, a real-time run continues until Ctrl+C. The binary itself is
-`target/debug/shopfloor` (or `cargo build -p shopfloor-cli --release`).
+`target/debug/shopfloor` (or `cargo build --release --bin shopfloor`).
 
 ### Tests and checks
 
 ```bash
 cargo test --workspace      # engine, scenes, scenario validation, golden event JSON, runtime, headless runs
 cargo clippy --workspace --all-targets
-npm run build               # TypeScript type-check + production bundle
+cd gui && npm run build     # TypeScript type-check + production bundle
 ```
 
 ## Using the app
@@ -73,7 +75,7 @@ npm run build               # TypeScript type-check + production bundle
 | Send it to a point | With an MM selected, click anywhere on the floor. A ghost circle shows where it will stop. |
 | Re-target | Give a new target while it moves. The old move is replaced immediately. |
 | Stop | **Stop** on the MM's card. |
-| Perform an action | Use the action buttons (Pick, Place, …) on the MM's card. A greyed-out button shows why on hover (e.g. "'pick' needs mm1 at a machine"). The action name flashes above the MM, and the card shows the last action. |
+| Perform an action | Use the action buttons (Pick, Place, ...) on the MM's card. A greyed-out button shows why on hover (e.g. "'pick' needs mm1 at a machine"). The action name flashes above the MM, and the card shows the last action. |
 | Change a sensor | Use the slider or number field in **Sensors** on the right. The reset button beside it restores the default. The pause button stops its readings, as if the sensor had failed, until you resume it. **noise σ** adds Gaussian noise. Clicking a reading or a free-standing sensor's diamond on the floor jumps to its control. Free-standing sensors are listed under **Floor**. |
 | Pause / reset | Toolbar, or **Space** to pause and resume. Reset returns to start positions, default sensor values and time 0. |
 | Inspect the output | The bottom panel shows every event. You can filter by kind or entity. **{}** shows the raw JSON lines that the sinks write. |
@@ -84,45 +86,47 @@ npm run build               # TypeScript type-check + production bundle
 
 ```
 shopfloor-sim/
-  sim/          shopfloor-sim: the engine (pure Rust, no Tauri). Tests live here.
-  cli/          shopfloor-cli: the headless `shopfloor` command
-  src-tauri/    shopfloor-gui: thin Tauri shell (commands + event bridge)
-  src/          React UI: draws state, sends commands
-  scenarios/    the bundled scenario files
-  docs/         design notes (local, git-ignored)
+  core/              shopfloor-core (pure Rust, no Tauri)
+    src/lib.rs         the engine. Tests live here.
+    src/main.rs        the headless `shopfloor` command (cargo feature `cli`, on by default)
+  gui/               the desktop app (npm project)
+    src/               React UI: draws state, sends commands
+    src-tauri/         shopfloor-gui: thin Tauri shell (commands + event bridge)
+  scenarios/         the bundled scenario files
+  docs/              design notes (local, git-ignored)
 ```
 
 ```
-React UI ── invoke("send_command", {move_to …}) ──► SimRuntime (tokio task owning the Engine)
+React UI ── invoke("send_command", {move_to ...}) ──► SimRuntime (tokio task owning the Engine)
    ▲                                                   │  ticks every sim.tick_ms
    │  "shopfloor://state"  (~30 Hz, WorldState)  ◄─────┤  watch channel
    │  "shopfloor://events" (every 100 ms, batch)  ◄────┤  broadcast channel ──► sinks (stdout, jsonl; own threads)
 ```
 
-- **`Engine`** ([sim/src/engine.rs](sim/src/engine.rs)) is synchronous and deterministic.
+- **`Engine`** ([core/src/engine.rs](core/src/engine.rs)) is synchronous and deterministic.
   - It changes only through `apply(command)` and `step()`. One step is one fixed tick of sim time.
   - Both return the events they caused.
   - Wall-clock time is passed in and used only to stamp events. Runs are therefore reproducible, and the engine can be
     stepped faster than real time.
-- **Commands** ([sim/src/command.rs](sim/src/command.rs)) are the only way in: `move_to`, `stop`, `perform`,
+- **Commands** ([core/src/command.rs](core/src/command.rs)) are the only way in: `move_to`, `stop`, `perform`,
   `set_sensor`, `set_sensor_noise` and `set_sensor_paused`.
   - Each one carries an origin: `ui`, `scene` or `api`.
   - The UI is just one command source. Scripted scenes or external tools can send the same commands.
 - **Action rules** live in one place, `Engine::action_blocker`.
   - It rejects a `perform` command that isn't allowed.
   - It also fills `MmView.actions` (available + reason), so the UI never re-implements the rules.
-- **Scenes** ([sim/src/scene.rs](sim/src/scene.rs)) are played by the engine itself, after each tick's physics.
+- **Scenes** ([core/src/scene.rs](core/src/scene.rs)) are played by the engine itself, after each tick's physics.
   - Their commands go through `apply` with `origin: "scene"`.
   - Waits are measured in simulation time.
   - So a scene pauses, resets and runs fast together with the world, and is deterministic.
-- **Path planning** sits behind `trait PathPlanner` ([sim/src/motion.rs](sim/src/motion.rs)). The default,
+- **Path planning** sits behind `trait PathPlanner` ([core/src/motion.rs](core/src/motion.rs)). The default,
   `StraightLine`, ignores obstacles.
-- **`SimRuntime`** ([sim/src/runtime.rs](sim/src/runtime.rs)) drives an engine in real time and fans out events.
+- **`SimRuntime`** ([core/src/runtime.rs](core/src/runtime.rs)) drives an engine in real time and fans out events.
   Loading a scenario starts a fresh runtime.
-- **Sinks** ([sim/src/sinks/](sim/src/sinks/)) each run on their own thread. A slow sink skips batches with a warning
+- **Sinks** ([core/src/sinks/](core/src/sinks/)) each run on their own thread. A slow sink skips batches with a warning
   instead of slowing the simulation.
 - **Headless runs** use the same `SimRuntime` in real time. `--fast` runs use
-  [sim/src/headless.rs](sim/src/headless.rs), which steps the engine in a loop and writes straight to the sinks.
+  [core/src/headless.rs](core/src/headless.rs), which steps the engine in a loop and writes straight to the sinks.
 
 ## Scenario files
 
@@ -159,25 +163,25 @@ they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to mat
 | `[machines.<id>] dock` | 0.5 m below the footprint | Where MMs park to service the machine |
 | `[machines.<id>] label` | id | Display name |
 | `[mobile_manipulators.<id>] start` *or* `start_at` | one required | `[x, y]`, or a machine id to start docked there |
-| `… start_heading_deg` | 0 | Initial heading |
-| `… max_speed_mps` | 0.5 | Driving speed (constant) |
-| `… radius_m` | 0.35 | Footprint. The MM's centre stays this far from the walls. |
-| `… actions` | all of `[actions]` | Ids of the actions this MM can perform |
+| `... start_heading_deg` | 0 | Initial heading |
+| `... max_speed_mps` | 0.5 | Driving speed (constant) |
+| `... radius_m` | 0.35 | Footprint. The MM's centre stays this far from the walls. |
+| `... actions` | all of `[actions]` | Ids of the actions this MM can perform |
 | `[actions.<id>]` | | An action MMs can perform. It is silent and only emits an `action` event. |
-| `… label` | `<id>` humanised | Button label |
-| `… requires_machine` | false | Only while docked at a machine (within `dock_tolerance_m` of its dock) |
-| `… allowed_while_moving` | false | Otherwise the MM must be stopped |
+| `... label` | `<id>` humanised | Button label |
+| `... requires_machine` | false | Only while docked at a machine (within `dock_tolerance_m` of its dock) |
+| `... allowed_while_moving` | false | Otherwise the MM must be stopped |
 | `[<machines\|mobile_manipulators>.<id>.sensors.<name>]` | | A sensor mounted on that entity. Its id is `<id>.<name>`. |
 | `[sensors.<id>]` + `position = [x, y]` | | A free-standing sensor at a fixed spot. It is its own entity: `entity` = `<id>`. It takes the same keys as below. |
-| `… default`, `range` | required | Initial value and `[min, max]`. Readings are clamped to the range. |
-| `… kind` | `<name>` | Sensor type, e.g. `vibration`, `lidar` |
-| `… unit` | "" | Unit string |
-| `… label` | `<name>` humanised (`hall_temp` → "Hall temp") | Display name |
-| `… period_ms` | 1000 | Reporting period |
-| `… noise_std` | 0 | Gaussian noise σ |
+| `... default`, `range` | required | Initial value and `[min, max]`. Readings are clamped to the range. |
+| `... kind` | `<name>` | Sensor type, e.g. `vibration`, `lidar` |
+| `... unit` | "" | Unit string |
+| `... label` | `<name>` humanised (`hall_temp` -> "Hall temp") | Display name |
+| `... period_ms` | 1000 | Reporting period |
+| `... noise_std` | 0 | Gaussian noise σ |
 | `[scenes.<id>]` | | A scripted run (see [Scenes](#scenes)) |
-| `… label` | `<id>` | Display name |
-| `… loop` / `… repeat` | run once | `loop = true` repeats until stopped; `repeat = N` runs N iterations |
+| `... label` | `<id>` | Display name |
+| `... loop` / `... repeat` | run once | `loop = true` repeats until stopped; `repeat = N` runs N iterations |
 | `[[scenes.<id>.tracks]]` `name`, `steps` | name: "track N" | A track: a list of steps run in order. A scene's tracks run in parallel. |
 | `[output] position_interval_ms` | 100 | How often a moving MM reports its position |
 | `[output.sinks.<name>] type = "stdout"` | | One JSON line per event on stdout |
@@ -277,7 +281,7 @@ in `config/examples/`, for example `config_shopfloor_vibr_tcp.toml` for the samp
 
 ```bash
 # terminal 1, here: the simulator (or the app, playing a scene)
-cargo run -p shopfloor-cli -- run scenarios/sample-floor.toml --scene production
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production
 # terminal 2, in the Liminal repo (or open the config in the Liminal GUI and press Run)
 cargo run -- --config config/examples/config_shopfloor_vibr_tcp.toml
 ```
@@ -322,7 +326,7 @@ Every event is **one flat JSON object** with the same envelope:
 {"v":1,"seq":88,"ts":1761730012300,"sim_ms":12300,"kind":"action","entity":"mm1","action":"pick","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
 ```
 
-The exact strings are pinned in [sim/src/event.rs](sim/src/event.rs).
+The exact strings are pinned in [core/src/event.rs](core/src/event.rs).
 
 Schema version rule:
 - **Adding** a kind or a field keeps `v`. Consumers should ignore what they don't know.
@@ -331,7 +335,7 @@ Schema version rule:
 Notes for Liminal pipelines:
 - Liminal's `tcp_input` makes each whole frame the message payload and keeps no topic. Route on the top-level fields,
   for example a `rule` with `condition = { field_path = "kind", operation = "equals", value = "sensor" }`.
-- Measurements (`x`, `y`, `value`, …) are always JSON floats. Liminal's `equals` is strict (`1` ≠ `1.0`), so compare
+- Measurements (`x`, `y`, `value`, ...) are always JSON floats. Liminal's `equals` is strict (`1` ≠ `1.0`), so compare
   numbers with `>`, `<`, `>=`, `<=`.
 - `ts` works directly as `timing.event_time_field = "ts"`.
 - `sensor_set`, `move_command` and `action` are ground truth: what the operator (or a script) did and when. That's
@@ -341,10 +345,10 @@ Notes for Liminal pipelines:
 ## Extending
 
 - **New sink** (e.g. TCP):
-  1. Add a `SinkKind` variant in [sim/src/scenario.rs](sim/src/scenario.rs).
-  2. Implement `EventSink` in `sim/src/sinks/`.
+  1. Add a `SinkKind` variant in [core/src/scenario.rs](core/src/scenario.rs).
+  2. Implement `EventSink` in `core/src/sinks/`.
   3. Construct it in `build_sink`.
-  4. Mirror it in `SinkDef` in [src/types.ts](src/types.ts) and give it an icon in the toolbar.
+  4. Mirror it in `SinkDef` in [gui/src/types.ts](gui/src/types.ts) and give it an icon in the toolbar.
 - **New MM action** (e.g. `weld`): no code needed. Add `[actions.weld]` to the scenario, and optionally list it in an
   MM's `actions`.
 - **New command:**
@@ -353,10 +357,10 @@ Notes for Liminal pipelines:
   3. Mirror it in `types.ts`.
 - **New event kind:**
   1. Add an `EventBody` variant with a golden test.
-  2. Update the `types.ts` union, `EVENT_KINDS`, `KIND_LABELS` / `describeEvent` in [src/format.ts](src/format.ts),
+  2. Update the `types.ts` union, `EVENT_KINDS`, `KIND_LABELS` / `describeEvent` in [gui/src/format.ts](gui/src/format.ts),
      and the `--kind-*` colour in `styles.css`.
 - **New scene step:**
-  1. Add a `StepSpec` variant and resolve it in `resolve_step` ([sim/src/scene.rs](sim/src/scene.rs)).
+  1. Add a `StepSpec` variant and resolve it in `resolve_step` ([core/src/scene.rs](core/src/scene.rs)).
   2. If it is a new kind of wait, add a `Wait` variant and check it in `Engine::run_scene`.
 - **Obstacle avoidance:** implement `PathPlanner` and pass it with `Engine::with_planner`.
 

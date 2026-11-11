@@ -1,5 +1,5 @@
 [workspace]
-members = ["sim", "src-tauri", "cli"]
+members = ["core", "gui/src-tauri"]
 resolver = "3"
 
 [workspace.package]
@@ -15,3 +15,4 @@ serde_json = "1"
 tokio = { version = "1.28", features = ["rt-multi-thread", "macros", "sync", "time"] }
 toml = "0.9.3"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

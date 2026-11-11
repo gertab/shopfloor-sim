@@ -3,14 +3,15 @@ target/
 node_modules/
 dist/
 .vite/
-src-tauri/gen/
+gui/src-tauri/gen/
 
 # Local recordings (jsonl sinks)
 recordings/
 
 # Local notes
 docs/
-NOTES.md
-ISSUES.md
+/*.md
+/*.MD
+!/README.md
 
 .DS_Store
