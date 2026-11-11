@@ -5,10 +5,12 @@
 //! batches (with a warning) rather than slowing the engine down.
 
 mod jsonl;
+mod mqtt;
 mod stdout;
 mod tcp;
 
 pub use jsonl::JsonlSink;
+pub use mqtt::MqttSink;
 pub use stdout::StdoutSink;
 pub use tcp::{TcpSink, encode_frames};
 
@@ -52,6 +54,19 @@ pub fn build_sink(def: &SinkDef, monitor: &SinkMonitor) -> anyhow::Result<Box<dy
         SinkKind::Stdout => Box::new(StdoutSink),
         SinkKind::Jsonl { path, append } => Box::new(JsonlSink::open(path, *append)?),
         SinkKind::Tcp { bind } => Box::new(TcpSink::bind(&def.name, bind, monitor.clone())?),
+        SinkKind::Mqtt {
+            broker,
+            topics,
+            qos,
+            client_id,
+        } => Box::new(MqttSink::connect(
+            &def.name,
+            broker,
+            topics,
+            *qos,
+            client_id.as_deref(),
+            monitor.clone(),
+        )?),
     })
 }
 

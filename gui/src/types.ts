@@ -1,13 +1,21 @@
-// Hand-written mirror of the Rust types in shopfloor/sim (scenario.rs, engine.rs, event.rs, command.rs).
+// Hand-written mirror of the Rust types in core/src (scenario.rs, engine.rs, event.rs, command.rs).
 
 export type Vec2 = { x: number; y: number };
 
 // --- Static layout (scenario.rs: Scenario) -----------------------------------------------------
 
+/** An MQTT topic and the events it carries. Empty filters match everything. */
+export interface MqttTopic {
+  topic: string;
+  kinds: EventKind[];
+  entities: string[];
+}
+
 export type SinkDef =
   | { name: string; type: "stdout" }
   | { name: string; type: "jsonl"; path: string; append: boolean }
-  | { name: string; type: "tcp"; bind: string };
+  | { name: string; type: "tcp"; bind: string }
+  | { name: string; type: "mqtt"; broker: string; topics: MqttTopic[]; qos: number; client_id: string | null };
 
 export interface MachineDef {
   id: string;

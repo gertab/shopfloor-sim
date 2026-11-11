@@ -2,6 +2,7 @@
 //!
 //! Every table uses `deny_unknown_fields` so a typo is an error instead of a silently ignored key.
 
+use crate::event::{EVENT_KINDS, SimEvent};
 use crate::geometry::{Rect, Vec2};
 use crate::scene::{SceneDef, SceneSpec, resolve_scenes};
 use anyhow::{Context, bail};
@@ -172,6 +173,73 @@ pub enum SinkKind {
     /// Listen on `bind` (e.g. `127.0.0.1:9000`) and stream every event to each connected client
     /// as a length-prefixed JSON frame.
     Tcp { bind: String },
+    /// Publish each event, as JSON, to every topic it matches on the MQTT broker at `broker`
+    /// (`host:port` or `mqtt://host:port`; the port defaults to 1883).
+    Mqtt {
+        broker: String,
+        #[serde(default)]
+        topics: Vec<MqttTopic>,
+        /// 0, 1 or 2.
+        #[serde(default)]
+        qos: u8,
+        /// Defaults to `shopfloor-<sink name>-<process id>`.
+        #[serde(default)]
+        client_id: Option<String>,
+    },
+}
+
+impl SinkKind {
+    /// Streams to consumers as events happen (TCP, MQTT), so it's only useful in real time.
+    pub fn is_live(&self) -> bool {
+        matches!(self, SinkKind::Tcp { .. } | SinkKind::Mqtt { .. })
+    }
+}
+
+/// An MQTT topic and the events it carries. An empty filter matches everything.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MqttTopic {
+    pub topic: String,
+    /// Event kinds, e.g. `["sensor", "sensor_set"]`.
+    #[serde(default)]
+    pub kinds: Vec<String>,
+    /// Values of the event's `entity` field (machine, MM or free-standing sensor ids). Events
+    /// without one (`sim`, `scene`) only match topics with no entity filter.
+    #[serde(default)]
+    pub entities: Vec<String>,
+}
+
+impl MqttTopic {
+    pub fn matches(&self, event: &SimEvent) -> bool {
+        let kind_ok = self.kinds.is_empty() || self.kinds.iter().any(|kind| kind == event.kind());
+        let entity_ok = self.entities.is_empty()
+            || event
+                .entity()
+                .is_some_and(|entity| self.entities.iter().any(|id| id == entity));
+        kind_ok && entity_ok
+    }
+}
+
+/// Host and port of an MQTT broker address: `host:port`, `mqtt://host:port` or just `host`
+/// (port 1883).
+pub fn parse_broker(broker: &str) -> Result<(String, u16), String> {
+    let address = broker.trim();
+    let address = address.strip_prefix("mqtt://").unwrap_or(address);
+    let (host, port) = match address.rsplit_once(':') {
+        Some((host, port)) => {
+            let port = port
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port != 0)
+                .ok_or_else(|| format!("'{broker}' has an invalid port"))?;
+            (host, port)
+        }
+        None => (address, 1883),
+    };
+    if host.is_empty() || host.contains('/') {
+        return Err(format!("'{broker}' is not a broker address (host:port)"));
+    }
+    Ok((host.to_string(), port))
 }
 
 fn default_name() -> String {
@@ -597,6 +665,20 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
                     append: *append,
                 }
             }
+            SinkKind::Mqtt {
+                broker,
+                topics,
+                qos,
+                client_id,
+            } => {
+                check_mqtt_sink(name, broker, topics, *qos, &seen_ids, &mut errors);
+                SinkKind::Mqtt {
+                    broker: broker.clone(),
+                    topics: topics.clone(),
+                    qos: *qos,
+                    client_id: client_id.clone(),
+                }
+            }
         };
         sinks.push(SinkDef {
             name: name.clone(),
@@ -626,6 +708,59 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
         bail!("Invalid scenario:\n  - {}", errors.join("\n  - "));
     }
     Ok(scenario)
+}
+
+fn check_mqtt_sink(
+    name: &str,
+    broker: &str,
+    topics: &[MqttTopic],
+    qos: u8,
+    entity_ids: &HashSet<&str>,
+    errors: &mut Vec<String>,
+) {
+    let at = format!("output.sinks.{name}");
+    if let Err(error) = parse_broker(broker) {
+        errors.push(format!("{at}.broker: {error}"));
+    }
+    if qos > 2 {
+        errors.push(format!("{at}.qos must be 0, 1 or 2 (got {qos})"));
+    }
+    if topics.is_empty() {
+        errors.push(format!(
+            "{at} must list at least one topic ([[{at}.topics]] with a `topic`)"
+        ));
+    }
+    let mut seen = HashSet::new();
+    for topic in topics {
+        let name = &topic.topic;
+        if name.is_empty() {
+            errors.push(format!("{at}.topics: a topic name must not be empty"));
+        } else if name.contains(['+', '#', '\0']) {
+            errors.push(format!(
+                "{at}.topics: '{name}' contains a wildcard ('+' or '#'), which only \
+                 subscribers may use"
+            ));
+        }
+        if !seen.insert(name) {
+            errors.push(format!("{at}.topics: '{name}' is listed more than once"));
+        }
+        for kind in &topic.kinds {
+            if !EVENT_KINDS.contains(&kind.as_str()) {
+                errors.push(format!(
+                    "{at}.topics: '{name}' names unknown event kind '{kind}' (known: {})",
+                    EVENT_KINDS.join(", ")
+                ));
+            }
+        }
+        for entity in &topic.entities {
+            if !entity_ids.contains(entity.as_str()) {
+                errors.push(format!(
+                    "{at}.topics: '{name}' names unknown entity '{entity}' (machines, mobile \
+                     manipulators and free-standing sensors)"
+                ));
+            }
+        }
+    }
 }
 
 /// Sensors nested under a machine or MM: id `<host>.<name>`, no `position` of their own.
@@ -875,6 +1010,88 @@ mod tests {
     fn rejects_unknown_sink_type() {
         let text = format!("{MINIMAL}\n[output.sinks.x]\ntype = \"carrier_pigeon\"\n");
         assert!(errors_of(&text).contains("carrier_pigeon"));
+    }
+
+    #[test]
+    fn parses_mqtt_sinks() {
+        let text = format!(
+            "{MINIMAL}
+[output.sinks.mqtt]
+type = \"mqtt\"
+broker = \"mqtt://127.0.0.1:1883\"
+
+[[output.sinks.mqtt.topics]]
+topic = \"shopfloor/sensors\"
+kinds = [\"sensor\", \"sensor_set\"]
+
+[[output.sinks.mqtt.topics]]
+topic = \"shopfloor/mm1\"
+entities = [\"mm1\"]
+"
+        );
+        let scenario = parse_scenario(&text, None).unwrap();
+        assert_eq!(
+            scenario.output.sinks,
+            vec![SinkDef {
+                name: "mqtt".into(),
+                kind: SinkKind::Mqtt {
+                    broker: "mqtt://127.0.0.1:1883".into(),
+                    topics: vec![
+                        MqttTopic {
+                            topic: "shopfloor/sensors".into(),
+                            kinds: vec!["sensor".into(), "sensor_set".into()],
+                            entities: vec![],
+                        },
+                        MqttTopic {
+                            topic: "shopfloor/mm1".into(),
+                            kinds: vec![],
+                            entities: vec!["mm1".into()],
+                        },
+                    ],
+                    qos: 0,
+                    client_id: None,
+                },
+            }]
+        );
+        assert!(scenario.output.sinks[0].kind.is_live());
+    }
+
+    #[test]
+    fn rejects_invalid_mqtt_sinks() {
+        let topic = "[[output.sinks.m.topics]]\ntopic = \"t\"\n";
+        let cases = [
+            (format!("broker = \"localhost:99999\"\n{topic}"), "invalid port"),
+            (format!("broker = \"mqtt://\"\n{topic}"), "not a broker address"),
+            (format!("broker = \"localhost\"\nqos = 3\n{topic}"), "qos must be 0, 1 or 2"),
+            ("broker = \"localhost\"\n".to_string(), "must list at least one topic"),
+            (
+                "broker = \"localhost\"\n[[output.sinks.m.topics]]\ntopic = \"a/#\"\n".to_string(),
+                "'a/#' contains a wildcard",
+            ),
+            (format!("broker = \"localhost\"\n{topic}{topic}"), "'t' is listed more than once"),
+            (
+                format!("broker = \"localhost\"\n{topic}kinds = [\"sensors\"]\n"),
+                "unknown event kind 'sensors'",
+            ),
+            (
+                format!("broker = \"localhost\"\n{topic}entities = [\"mm9\"]\n"),
+                "unknown entity 'mm9'",
+            ),
+        ];
+        for (sink, expected) in cases {
+            let text = format!("{MINIMAL}\n[output.sinks.m]\ntype = \"mqtt\"\n{sink}");
+            let errors = errors_of(&text);
+            assert!(errors.contains(expected), "expected {expected:?} in:\n{errors}");
+        }
+    }
+
+    #[test]
+    fn parses_broker_addresses() {
+        assert_eq!(parse_broker("localhost"), Ok(("localhost".into(), 1883)));
+        assert_eq!(parse_broker("mqtt://10.0.0.5:1884"), Ok(("10.0.0.5".into(), 1884)));
+        assert_eq!(parse_broker("broker.local:8883"), Ok(("broker.local".into(), 8883)));
+        assert!(parse_broker("localhost:0").is_err());
+        assert!(parse_broker("").is_err());
     }
 
     #[test]

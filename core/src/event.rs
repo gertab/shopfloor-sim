@@ -152,7 +152,34 @@ impl SimEvent {
             EventBody::Scene { .. } => "scene",
         }
     }
+
+    /// The machine, MM or free-standing sensor the event is about (`None` for `sim` and `scene`).
+    pub fn entity(&self) -> Option<&str> {
+        match &self.body {
+            EventBody::Position { entity, .. }
+            | EventBody::MoveCommand { entity, .. }
+            | EventBody::Arrived { entity, .. }
+            | EventBody::Stopped { entity, .. }
+            | EventBody::Sensor { entity, .. }
+            | EventBody::SensorSet { entity, .. }
+            | EventBody::Action { entity, .. } => Some(entity),
+            EventBody::Sim { .. } | EventBody::Scene { .. } => None,
+        }
+    }
 }
+
+/// Every value of `kind`, as [`SimEvent::kind`] returns it.
+pub const EVENT_KINDS: &[&str] = &[
+    "position",
+    "move_command",
+    "arrived",
+    "stopped",
+    "sensor",
+    "sensor_set",
+    "action",
+    "sim",
+    "scene",
+];
 
 #[cfg(test)]
 mod tests {
@@ -174,6 +201,10 @@ mod tests {
         assert_eq!(json, expected);
         let parsed: SimEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, event, "round trip");
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["kind"], event.kind());
+        assert!(EVENT_KINDS.contains(&event.kind()), "{} is missing from EVENT_KINDS", event.kind());
+        assert_eq!(value.get("entity").and_then(|entity| entity.as_str()), event.entity());
     }
 
     #[test]
@@ -348,5 +379,15 @@ mod tests {
             ),
             r#"{"v":1,"seq":1,"ts":1761730000000,"sim_ms":0,"kind":"sim","state":"started","scenario":"Default cell"}"#,
         );
+    }
+
+    /// Every name in `EVENT_KINDS` is a real `kind` (the golden tests check the other direction).
+    #[test]
+    fn event_kinds_are_real_kinds() {
+        for kind in EVENT_KINDS {
+            let json = format!(r#"{{"v":1,"seq":1,"ts":0,"sim_ms":0,"kind":"{kind}"}}"#);
+            let error = serde_json::from_str::<SimEvent>(&json).unwrap_err().to_string();
+            assert!(!error.contains("unknown variant"), "{kind}: {error}");
+        }
     }
 }

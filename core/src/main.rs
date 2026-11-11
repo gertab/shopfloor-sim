@@ -195,12 +195,12 @@ fn run(
 
     let end = if fast {
         // Streaming minutes of data to a consumer in a fraction of a second isn't useful, so TCP
-        // sinks only run in real time.
+        // and MQTT sinks only run in real time.
         let monitor = SinkMonitor::default();
         let mut sinks: Vec<Box<dyn EventSink>> = Vec::new();
         for def in &scenario.output.sinks {
-            if matches!(def.kind, SinkKind::Tcp { .. }) {
-                tracing::info!("--fast: skipping TCP sink '{}'", def.name);
+            if def.kind.is_live() {
+                tracing::info!("--fast: skipping live sink '{}'", def.name);
                 continue;
             }
             sinks.push(build_sink(def, &monitor)?);
@@ -293,6 +293,10 @@ fn describe_sink(sink: &SinkDef) -> String {
         SinkKind::Stdout => format!("{} (stdout)", sink.name),
         SinkKind::Jsonl { path, .. } => format!("{} (jsonl -> {})", sink.name, path.display()),
         SinkKind::Tcp { bind } => format!("{} (tcp, listening on {bind})", sink.name),
+        SinkKind::Mqtt { broker, topics, .. } => {
+            let topics: Vec<&str> = topics.iter().map(|topic| topic.topic.as_str()).collect();
+            format!("{} (mqtt -> {broker}: {})", sink.name, topics.join(", "))
+        }
     }
 }
 

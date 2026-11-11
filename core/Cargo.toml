@@ -25,6 +25,7 @@ toml.workspace = true
 tracing.workspace = true
 clap = { version = "4.5", features = ["derive"], optional = true }
 tracing-subscriber = { workspace = true, optional = true }
+rumqttc = { version = "0.25.1", default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

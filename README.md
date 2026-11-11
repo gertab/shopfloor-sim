@@ -14,8 +14,9 @@ between them. Both can carry **sensors**, and sensors can also stand on their ow
   or headless from the command line, so the stream can be produced without anyone clicking.
 - Everything that happens is emitted as a stream of JSON events: positions, move commands, actions and sensor readings.
 
-Events go to the in-app log and, depending on the scenario's outputs, to stdout, JSONL files, and **over TCP** to any
-program that connects, such as a stream processor (see [Streaming over TCP](#streaming-over-tcp)).
+Events go to the in-app log and, depending on the scenario's outputs, to stdout, JSONL files, **over TCP** to any
+program that connects, such as a stream processor, and to **MQTT** topics on a broker (see
+[Streaming over TCP](#streaming-over-tcp) and [Streaming over MQTT](#streaming-over-mqtt)).
 
 ## Run it
 
@@ -49,9 +50,9 @@ cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production 
 |---|---|
 | `--scene ID` | Play this scene from the start. The run ends when the scene finishes (exit 0) or fails (exit 1). |
 | `--duration SECS` | Stop after this much simulation time. Required with `--fast` for a looping scene. |
-| `--fast` | Run as fast as possible. Events are still stamped as if the run happened in real time. |
+| `--fast` | Run as fast as possible. Events are still stamped as if the run happened in real time. TCP and MQTT outputs are skipped. |
 | `--jsonl PATH` | Also write every event to this file (overwritten). |
-| `--tcp ADDR` | Also stream every event over TCP on this address, e.g. `127.0.0.1:9000`. TCP outputs are skipped with `--fast`. |
+| `--tcp ADDR` | Also stream every event over TCP on this address, e.g. `127.0.0.1:9000`. |
 
 Without `--scene` or `--duration`, a real-time run continues until Ctrl+C. The binary itself is
 `target/debug/shopfloor` (or `cargo build --release --bin shopfloor`).
@@ -181,6 +182,9 @@ they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to mat
 | `[output.sinks.<name>] type = "stdout"` | | One JSON line per event on stdout |
 | `[output.sinks.<name>] type = "jsonl", path, append = true` | | One JSON line per event in a file. The path is relative to the scenario file. |
 | `[output.sinks.<name>] type = "tcp", bind` | | Listen on `bind` (e.g. `127.0.0.1:9000`) and stream every event to each connected client as a length-prefixed JSON frame (see [Streaming over TCP](#streaming-over-tcp)). |
+| `[output.sinks.<name>] type = "mqtt", broker` | | Publish each event to the MQTT topics it matches, on the broker at `broker` (`host:port` or `mqtt://host:port`; port 1883 by default). See [Streaming over MQTT](#streaming-over-mqtt). |
+| `... qos`, `client_id` | 0, `shopfloor-<name>-<process id>` | MQTT quality of service (0, 1 or 2) and client id |
+| `[[output.sinks.<name>.topics]]` `topic`, `kinds`, `entities` | filters: everything | A topic and the events it carries: those whose `kind` is in `kinds` and whose `entity` is in `entities`. At least one is required. |
 
 Rules worth knowing:
 - Entity ids use letters, digits, `_` and `-`.
@@ -266,6 +270,57 @@ How the link behaves:
 
 For a stream processor consuming this link, see [Example: Liminal](#example-liminal).
 
+## Streaming over MQTT
+
+An `mqtt` output publishes events to an MQTT broker, such as [Mosquitto](https://mosquitto.org/), on topics you
+define. Each topic says which events it carries, so a subscriber can take only the part of the stream it needs:
+
+```toml
+[output.sinks.mqtt]
+type = "mqtt"
+broker = "127.0.0.1:1883"
+
+# Sensor readings and sensor changes, and nothing else.
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/sensors"
+kinds = ["sensor", "sensor_set"]
+
+# Everything about mm1.
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/mm1"
+entities = ["mm1"]
+
+# Every event.
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/all"
+```
+
+How it behaves:
+- **Routing:** an event goes to every topic it matches. It matches when its `kind` is in `kinds` and its `entity` is
+  in `entities`, and a missing filter matches everything.
+  - `sim` and `scene` events have no `entity`, so they only go to topics without an `entities` filter.
+  - Unknown kinds and entities are errors when the scenario loads, as are wildcards (`+`, `#`) in a topic name.
+- **Payload:** each message is one event, as the same JSON line the other outputs write. Messages are not retained.
+- **Either side can start first.**
+  - The simulator retries every second until the broker is up. It logs the first failure, not every attempt.
+  - Events from while the broker is unreachable are dropped, so subscribers see what happens while it is connected.
+  - Events from before the first connection attempt has finished are sent once it succeeds, so a run started with
+    the broker up delivers everything from `sim` `started`.
+- **Connection status:** in the app, the toolbar's `mqtt` badge shows a green dot while connected. Its tooltip lists
+  the topics and their filters. The CLI logs connects and lost connections.
+- **Several processes per broker:** the app and a CLI run can publish to the same broker at once, because each
+  connects with its own client id.
+
+To try it, refer to the MQTT output in [scenarios/sample-floor.toml](scenarios/sample-floor.toml), then:
+
+```bash
+docker run -it -p 1883:1883 eclipse-mosquitto        # terminal 1: a Mosquitto broker on localhost:1883
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production   # terminal 2
+```
+
+Then subscribe to a topic, such as `shopfloor/sensors`, on `localhost:1883` with any MQTT client: Postman, or
+`mosquitto_sub -t shopfloor/sensors -v` if Mosquitto is installed.
+
 ## Output events
 
 Every event is **one flat JSON object** with the same envelope:
@@ -325,6 +380,17 @@ type = "tcp_input"
 output = "shopfloor_events"
 channel = { type = "broadcast", capacity = 1024 }
 parameters = { mode = "client", host = "127.0.0.1", port = 9000, reconnect = true, reconnect_interval_ms = 1000 }
+```
+
+With an [MQTT output](#streaming-over-mqtt), Liminal's `mqtt_sub` can instead subscribe to only the topics a pipeline
+needs. It parses each payload as JSON:
+
+```toml
+[inputs.sensors]
+type = "mqtt_sub"
+output = "sensor_events"
+channel = { type = "broadcast", capacity = 1024 }
+parameters = { broker_url = "mqtt://127.0.0.1:1883", topics = ["shopfloor/sensors"] }
 ```
 
 Liminal's `shopfloor` branch has ready-made pipelines for the bundled scenarios in
@@ -389,4 +455,4 @@ How it behaves:
 - An obstacle-avoiding planner.
 - Lidar computed from the layout.
 - In-app layout editing.
-- An MQTT sink.
+- MQTT over TLS, and broker usernames and passwords.

@@ -1,6 +1,23 @@
-import { Cable, Clapperboard, FileText, FolderOpen, Pause, Play, RefreshCw, RotateCcw, Terminal } from "lucide-react";
+import {
+  Cable,
+  Clapperboard,
+  FileText,
+  FolderOpen,
+  Pause,
+  Play,
+  RadioTower,
+  RefreshCw,
+  RotateCcw,
+  Terminal,
+} from "lucide-react";
 import { formatSimTime } from "../../format";
-import type { Control, Scenario, WorldState } from "../../types";
+import type { Control, MqttTopic, Scenario, WorldState } from "../../types";
+
+/** "shopfloor/sensors ← sensor, sensor_set" for a badge tooltip. */
+function describeTopic({ topic, kinds, entities }: MqttTopic): string {
+  const filters = [...kinds, ...entities];
+  return `${topic} ← ${filters.length > 0 ? filters.join(", ") : "every event"}`;
+}
 
 interface ToolbarProps {
   scenario: Scenario | null;
@@ -96,6 +113,20 @@ export function Toolbar({
                 {sink.name}
                 <span className="sink-dot" />
                 {clients}
+              </span>
+            );
+          }
+          if (sink.type === "mqtt") {
+            const status = sinkStatus[sink.name] ?? `not connected (${sink.broker})`;
+            return (
+              <span
+                key={sink.name}
+                className={`sink-badge${status.startsWith("connected") ? " is-connected" : ""}`}
+                title={[`mqtt: ${status}`, ...sink.topics.map(describeTopic)].join("\n")}
+              >
+                <RadioTower size={12} />
+                {sink.name}
+                <span className="sink-dot" />
               </span>
             );
           }

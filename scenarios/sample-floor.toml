@@ -260,6 +260,23 @@ type = "stdout"
 type = "tcp"
 bind = "127.0.0.1:9000"
 
+# Publish events to MQTT topics on a broker such as Mosquitto. 
+# Each event goes to every topic it matches; a topic without filters gets every event.
+[output.sinks.mqtt]
+type = "mqtt"
+broker = "127.0.0.1:1883"
+
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/sensors"
+kinds = ["sensor"]
+
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/mm1"
+entities = ["mm1"]
+
+[[output.sinks.mqtt.topics]]
+topic = "shopfloor/all"
+
 # Record every event to a file (relative to this scenario file). `recordings/` is git-ignored.
 # [output.sinks.recording]
 # type = "jsonl"
