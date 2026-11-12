@@ -133,13 +133,57 @@ TOML, in metres and seconds.
 - Heading 0 is +x, counter-clockwise.
 - **Unknown keys are errors.** All validation errors are reported together.
 
-See [scenarios/sample-floor.toml](scenarios/sample-floor.toml) for a commented example. All the bundled scenarios use
-the same file format and the same simulator:
+A small floor, [scenarios/small-floor.toml](scenarios/small-floor.toml): two machines and one MM, with a sensor on
+the oven and one on the MM:
+
+```toml
+name = "Small shop floor"
+
+[floor]
+width_m = 12.0
+height_m = 8.0
+
+# Two machines. An MM parks at a machine's dock: 0.5 m below it, unless `dock` says otherwise.
+[machines.press]
+position = [3.0, 6.0]
+size = [2.0, 1.5]
+
+[machines.oven]
+position = [9.0, 6.0]
+size = [2.0, 1.5]
+
+[machines.oven.sensors.temperature]
+unit = "°C"
+default = 180.0
+range = [0.0, 300.0]
+
+# One mobile manipulator, starting at the press, with a sensor of its own.
+[mobile_manipulators.mm1]
+start_at = "press"
+
+[mobile_manipulators.mm1.sensors.vibration]
+unit = "g"
+default = 0.2
+range = [0.0, 5.0]
+
+[actions.pick]
+requires_machine = true
+
+# Every event as a JSON line on stdout.
+[output.sinks.terminal]
+type = "stdout"
+```
+
+Open it in the app, or run it headless with `cargo run --bin shopfloor -- run scenarios/small-floor.toml`.
+
+See [scenarios/sample-floor.toml](scenarios/sample-floor.toml) for a larger, commented example. All the bundled
+scenarios use the same file format and the same simulator:
 
 | Scenario | Setting | Floor | Scenes | Outputs |
 |---|---|---|---|---|
 | [basic.toml](scenarios/basic.toml) | The smallest useful floor: one MM, one machine, one sensor | 10×6 m | `visit_machine` | None |
-| [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP |
+| [small-floor.toml](scenarios/small-floor.toml) | The example above: two machines and one MM, two sensors | 12×8 m | None | stdout |
+| [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | TCP |
 
@@ -317,6 +361,7 @@ To try it, refer to the MQTT output in [scenarios/sample-floor.toml](scenarios/s
 docker run -it -p 1883:1883 eclipse-mosquitto        # terminal 1: a Mosquitto broker on localhost:1883
 cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production   # terminal 2
 ```
+<!-- docker run -d -p 1883:1883 --name mosquitto eclipse-mosquitto -->
 
 Then subscribe to a topic, such as `shopfloor/sensors`, on `localhost:1883` with any MQTT client: Postman, or
 `mosquitto_sub -t shopfloor/sensors -v` if Mosquitto is installed.
