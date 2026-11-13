@@ -1,5 +1,5 @@
 use super::*;
-use crate::event::SceneState;
+use crate::event::{DockEvent, MoveEvent, Point, SceneState, UndockEvent};
 use crate::scenario::parse_scenario;
 
 const SCENARIO: &str = r#"
@@ -81,40 +81,55 @@ fn run(engine: &mut Engine, ticks: usize) -> Vec<SimEvent> {
 fn positions_of<'a>(events: &'a [SimEvent], mm: &str) -> Vec<&'a SimEvent> {
     events
         .iter()
-        .filter(|e| matches!(&e.body, EventBody::Position { entity, .. } if entity == mm))
+        .filter(|e| matches!(&e.body, EventBody::Position { device_id, .. } if device_id == mm))
         .collect()
 }
 
-fn place(x: f64, y: f64, at: Option<&str>) -> Place {
-    Place {
-        x,
-        y,
-        at: at.map(str::to_string),
-    }
+fn machine_id(id: Option<&str>) -> Option<String> {
+    id.map(str::to_string)
 }
 
 #[test]
-fn move_to_machine_reports_from_and_to_docks() {
+fn move_to_machine_undocks_and_reports_from_and_to_docks() {
     let mut engine = engine();
     let events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
     assert_eq!(
         events,
-        vec![SimEvent {
-            v: 1,
-            seq: 1,
-            ts: TS,
-            sim_ms: 0,
-            body: EventBody::MoveCommand {
-                entity: "mm1".into(),
-                command_id: 1,
-                origin: Origin::Ui,
-                from: place(4.0, 7.0, Some("machine1")),
-                to: place(12.0, 7.0, Some("machine2")),
-                distance_m: 8.0,
-                eta_ms: 10_000,
-                replaces: None,
+        vec![
+            SimEvent {
+                v: 2,
+                seq: 1,
+                timestamp_ms: TS,
+                sim_ms: 0,
+                body: EventBody::Undock {
+                    device_id: "mm1".into(),
+                    event: UndockEvent::Undock,
+                    target: "machine1".into(),
+                    command_id: 1,
+                    x: 4.0,
+                    y: 7.0,
+                },
             },
-        }]
+            SimEvent {
+                v: 2,
+                seq: 2,
+                timestamp_ms: TS,
+                sim_ms: 0,
+                body: EventBody::MoveCommand {
+                    device_id: "mm1".into(),
+                    event: MoveEvent::Move,
+                    source: machine_id(Some("machine1")),
+                    destination: machine_id(Some("machine2")),
+                    command_id: 1,
+                    origin: Origin::Ui,
+                    from: Point { x: 4.0, y: 7.0 },
+                    to: Point { x: 12.0, y: 7.0 },
+                    distance_m: 8.0,
+                    eta_ms: 10_000,
+                    replaces: None,
+                },
+            },
+        ]
     );
 }
 
@@ -132,7 +147,7 @@ fn moving_mm_reports_position_every_interval_then_arrives() {
     assert_eq!(
         positions[0].body,
         EventBody::Position {
-            entity: "mm1".into(),
+            device_id: "mm1".into(),
             x: 4.08,
             y: 7.0,
             heading_rad: 0.0,
@@ -142,7 +157,7 @@ fn moving_mm_reports_position_every_interval_then_arrives() {
     assert_eq!(
         positions.last().unwrap().body,
         EventBody::Position {
-            entity: "mm1".into(),
+            device_id: "mm1".into(),
             x: 12.0,
             y: 7.0,
             heading_rad: 0.0,
@@ -159,7 +174,7 @@ fn moving_mm_reports_position_every_interval_then_arrives() {
     assert_eq!(
         arrivals[0].body,
         EventBody::Arrived {
-            entity: "mm1".into(),
+            device_id: "mm1".into(),
             command_id: 1,
             x: 12.0,
             y: 7.0,
@@ -207,11 +222,14 @@ fn redirect_mid_move_replaces_previous_command() {
     assert_eq!(
         events[0].body,
         EventBody::MoveCommand {
-            entity: "mm1".into(),
+            device_id: "mm1".into(),
+            event: MoveEvent::Move,
+            source: None,
+            destination: None,
             command_id: 2,
             origin: Origin::Ui,
-            from: place(8.0, 7.0, None),
-            to: place(8.0, 3.0, None),
+            from: Point { x: 8.0, y: 7.0 },
+            to: Point { x: 8.0, y: 3.0 },
             distance_m: 4.0,
             eta_ms: 5_000,
             replaces: Some(1),
@@ -241,7 +259,7 @@ fn stop_halts_motion() {
     assert_eq!(
         events[0].body,
         EventBody::Stopped {
-            entity: "mm1".into(),
+            device_id: "mm1".into(),
             command_id: 1,
             x: 5.6,
             y: 7.0,
@@ -282,7 +300,9 @@ fn point_target_near_a_dock_is_labelled_with_that_machine() {
         .apply(move_to("mm2", Target::Point { x: 12.1, y: 7.1 }), TS)
         .unwrap();
     match &events[0].body {
-        EventBody::MoveCommand { to, .. } => assert_eq!(to.at.as_deref(), Some("machine2")),
+        EventBody::MoveCommand { destination, .. } => {
+            assert_eq!(destination.as_deref(), Some("machine2"))
+        }
         other => panic!("unexpected {other:?}"),
     }
 }
@@ -321,8 +341,8 @@ fn sensors_report_on_their_period_and_follow_setpoints() {
         events[0].body,
         EventBody::SensorSet {
             sensor: "mm1.vibration".into(),
-            entity: "mm1".into(),
-            sensor_kind: "vibration".into(),
+            device_id: "mm1".into(),
+            sensor_type: "vibration".into(),
             setpoint: 0.8,
             noise_std: 0.0,
             previous_setpoint: 0.1,
@@ -543,7 +563,7 @@ fn invalid_commands_are_rejected_without_side_effects() {
     // Nothing was consumed: the next valid command gets seq 1 and command_id 1.
     let events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
     assert_eq!(events[0].seq, 1);
-    assert!(matches!(events[0].body, EventBody::MoveCommand { command_id: 1, .. }));
+    assert!(matches!(events[1].body, EventBody::MoveCommand { command_id: 1, .. }));
 }
 
 #[test]
@@ -623,6 +643,7 @@ fn perform(mm: &str, action: &str) -> CommandEnvelope {
     ui(SimCommand::Perform {
         mm: mm.into(),
         action: action.into(),
+        object: None,
     })
 }
 
@@ -643,13 +664,14 @@ fn perform_at_a_dock_emits_action_and_changes_nothing() {
     assert_eq!(
         events,
         vec![SimEvent {
-            v: 1,
+            v: 2,
             seq: 1,
-            ts: TS,
+            timestamp_ms: TS,
             sim_ms: 0,
             body: EventBody::Action {
-                entity: "mm1".into(),
-                action: "pick".into(),
+                device_id: "mm1".into(),
+                event: "pick".into(),
+                object: None,
                 command_id: 1,
                 x: 4.0,
                 y: 7.0,
@@ -659,6 +681,25 @@ fn perform_at_a_dock_emits_action_and_changes_nothing() {
         }]
     );
     assert_eq!(engine.state(), before, "actions are silent");
+}
+
+#[test]
+fn actions_report_the_object_they_were_given() {
+    let mut engine = engine();
+    let events = engine
+        .apply(
+            ui(SimCommand::Perform {
+                mm: "mm1".into(),
+                action: "pick".into(),
+                object: Some("dies".into()),
+            }),
+            TS,
+        )
+        .unwrap();
+    assert!(matches!(
+        &events[0].body,
+        EventBody::Action { event, object: Some(object), .. } if event == "pick" && object == "dies"
+    ));
 }
 
 #[test]
@@ -738,6 +779,141 @@ fn action_availability_follows_the_mm() {
 
     run(&mut engine, 600);
     assert!(availability(&engine, 0, "pick").available, "docked at machine2");
+}
+
+// --- Docking -------------------------------------------------------------------------------
+
+/// `(kind, target)` of every `undock` and `dock`, and the kinds of the motion events around them.
+fn docking_of(events: &[SimEvent], mm: &str) -> Vec<(&'static str, Option<String>)> {
+    events
+        .iter()
+        .filter(|e| e.device_id() == Some(mm))
+        .filter_map(|e| match &e.body {
+            EventBody::Undock { target, .. } | EventBody::Dock { target, .. } => {
+                Some((e.kind(), Some(target.clone())))
+            }
+            EventBody::MoveCommand { .. } | EventBody::Arrived { .. } | EventBody::Stopped { .. } => {
+                Some((e.kind(), None))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_trip_between_machines_undocks_and_docks() {
+    let mut engine = engine();
+    let mut events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    events.extend(run(&mut engine, 600));
+    assert_eq!(
+        docking_of(&events, "mm1"),
+        vec![
+            ("undock", machine_id(Some("machine1"))),
+            ("move_command", None),
+            ("arrived", None),
+            ("dock", machine_id(Some("machine2"))),
+        ]
+    );
+    let dock = events.iter().find(|e| e.kind() == "dock").unwrap();
+    assert_eq!(dock.sim_ms, 10_000);
+    assert_eq!(
+        dock.body,
+        EventBody::Dock {
+            device_id: "mm1".into(),
+            event: DockEvent::Dock,
+            target: "machine2".into(),
+            command_id: 1,
+            x: 12.0,
+            y: 7.0,
+        }
+    );
+    // Arriving comes first, at the same instant.
+    let arrived = events.iter().position(|e| e.kind() == "arrived").unwrap();
+    assert_eq!(events[arrived + 1].kind(), "dock");
+}
+
+#[test]
+fn only_a_docked_mm_undocks_and_only_at_a_machine_does_it_dock() {
+    let mut engine = engine();
+    // mm2 starts on the open floor and drives to another point: neither event.
+    let mut events = engine
+        .apply(move_to("mm2", Target::Point { x: 2.0, y: 4.0 }), TS)
+        .unwrap();
+    events.extend(run(&mut engine, 300));
+    assert_eq!(
+        docking_of(&events, "mm2"),
+        vec![("move_command", None), ("arrived", None)]
+    );
+
+    // Then to a machine: a dock but no undock.
+    let mut events = engine.apply(move_to("mm2", machine("machine1")), TS).unwrap();
+    events.extend(run(&mut engine, 600));
+    assert_eq!(
+        docking_of(&events, "mm2"),
+        vec![
+            ("move_command", None),
+            ("arrived", None),
+            ("dock", machine_id(Some("machine1"))),
+        ]
+    );
+}
+
+#[test]
+fn a_move_to_where_the_mm_already_is_neither_undocks_nor_docks() {
+    let mut engine = engine();
+    let events = engine.apply(move_to("mm1", machine("machine1")), TS).unwrap();
+    assert_eq!(
+        docking_of(&events, "mm1"),
+        vec![("move_command", None), ("arrived", None)]
+    );
+}
+
+#[test]
+fn redirecting_a_moving_mm_does_not_undock_again() {
+    let mut engine = engine();
+    let mut events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    events.extend(run(&mut engine, 100));
+    events.extend(
+        engine
+            .apply(move_to("mm1", Target::Point { x: 8.0, y: 3.0 }), TS)
+            .unwrap(),
+    );
+    let undocks = events.iter().filter(|e| e.kind() == "undock").count();
+    assert_eq!(undocks, 1);
+}
+
+#[test]
+fn stopping_at_a_dock_docks_and_stopping_between_machines_does_not() {
+    let mut engine = engine();
+    engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    run(&mut engine, 100); // 2 s -> x = 5.6, between machines
+    let events = engine
+        .apply(ui(SimCommand::Stop { mm: "mm1".into() }), TS)
+        .unwrap();
+    assert_eq!(docking_of(&events, "mm1"), vec![("stopped", None)]);
+
+    engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    run(&mut engine, 390); // 7.8 s -> x = 11.84, 0.16 m short of machine2's dock
+    let events = engine
+        .apply(ui(SimCommand::Stop { mm: "mm1".into() }), TS)
+        .unwrap();
+    assert_eq!(
+        docking_of(&events, "mm1"),
+        vec![("stopped", None), ("dock", machine_id(Some("machine2")))]
+    );
+}
+
+#[test]
+fn reset_docks_mms_at_their_start_machine_again() {
+    let mut engine = engine();
+    engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    run(&mut engine, 600);
+    engine.control(Control::Reset, TS).unwrap();
+    let events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
+    assert_eq!(
+        docking_of(&events, "mm1")[0],
+        ("undock", machine_id(Some("machine1")))
+    );
 }
 
 // --- Sensor positions ------------------------------------------------------------------------
@@ -850,9 +1026,9 @@ fn playing_a_scene_runs_its_first_steps_immediately() {
     let mut engine = scene_engine();
     let events = play(&mut engine, "shuttle");
     let kinds: Vec<&str> = events.iter().map(SimEvent::kind).collect();
-    assert_eq!(kinds, vec!["scene", "move_command"]);
+    assert_eq!(kinds, vec!["scene", "undock", "move_command"]);
     assert!(matches!(
-        &events[1].body,
+        &events[2].body,
         EventBody::MoveCommand { origin: Origin::Scene, command_id: 1, .. }
     ));
 }

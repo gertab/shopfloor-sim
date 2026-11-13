@@ -22,6 +22,8 @@
   --kind-move_command: #f2b84b;
   --kind-arrived: #53c7b6;
   --kind-stopped: #ef6b6b;
+  --kind-undock: #e8a06a;
+  --kind-dock: #7fd6a8;
   --kind-sensor: #b48cff;
   --kind-sensor_set: #ff8fc7;
   --kind-action: #9ad86b;
@@ -853,6 +855,8 @@ h3 {
 .kind-move_command { color: var(--kind-move_command); }
 .kind-arrived { color: var(--kind-arrived); }
 .kind-stopped { color: var(--kind-stopped); }
+.kind-undock { color: var(--kind-undock); }
+.kind-dock { color: var(--kind-dock); }
 .kind-sensor { color: var(--kind-sensor); }
 .kind-sensor_set { color: var(--kind-sensor_set); }
 .kind-action { color: var(--kind-action); }

@@ -20,8 +20,13 @@ pub enum SimCommand {
     /// and carries on with its usual schedule and current setpoint when resumed.
     SetSensorPaused { sensor: String, paused: bool },
     /// Perform one of the scenario's `[actions]` (e.g. pick). Silent: it only emits an `action`
-    /// event, if the action's conditions hold.
-    Perform { mm: String, action: String },
+    /// event, if the action's conditions hold. `object` (e.g. "dies") is reported in the event.
+    Perform {
+        mm: String,
+        action: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        object: Option<String>,
+    },
 }
 
 /// JSON: `{"point": {"x": 1.0, "y": 2.0}}` or `{"machine": "machine2"}`.
@@ -108,10 +113,23 @@ mod tests {
         let perform = SimCommand::Perform {
             mm: "mm1".into(),
             action: "pick".into(),
+            object: None,
         };
         assert_eq!(
             serde_json::to_value(&perform).unwrap(),
             json!({"type": "perform", "mm": "mm1", "action": "pick"})
+        );
+        let parsed: SimCommand = serde_json::from_value(
+            json!({"type": "perform", "mm": "mm1", "action": "pick", "object": "dies"}),
+        )
+        .unwrap();
+        assert_eq!(
+            parsed,
+            SimCommand::Perform {
+                mm: "mm1".into(),
+                action: "pick".into(),
+                object: Some("dies".into()),
+            }
         );
     }
 
@@ -154,7 +172,8 @@ mod tests {
             step.command,
             SimCommand::Perform {
                 mm: "mm1".into(),
-                action: "pick".into()
+                action: "pick".into(),
+                object: None,
             }
         );
     }

@@ -203,7 +203,7 @@ pub struct MqttTopic {
     /// Event kinds, e.g. `["sensor", "sensor_set"]`.
     #[serde(default)]
     pub kinds: Vec<String>,
-    /// Values of the event's `entity` field (machine, MM or free-standing sensor ids). Events
+    /// Values of the event's `device_id` field (machine, MM or free-standing sensor ids). Events
     /// without one (`sim`, `scene`) only match topics with no entity filter.
     #[serde(default)]
     pub entities: Vec<String>,
@@ -214,8 +214,8 @@ impl MqttTopic {
         let kind_ok = self.kinds.is_empty() || self.kinds.iter().any(|kind| kind == event.kind());
         let entity_ok = self.entities.is_empty()
             || event
-                .entity()
-                .is_some_and(|entity| self.entities.iter().any(|id| id == entity));
+                .device_id()
+                .is_some_and(|device_id| self.entities.iter().any(|id| id == device_id));
         kind_ok && entity_ok
     }
 }
@@ -486,6 +486,12 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
         if !valid_id(id) {
             errors.push(format!(
                 "action '{id}' may only contain letters, digits, '_' and '-'"
+            ));
+        }
+        if RESERVED_ACTION_IDS.contains(&id.as_str()) {
+            errors.push(format!(
+                "action '{id}' is reserved: an action's id is its event's `event`, which is also \
+                 \"move\", \"dock\" or \"undock\" for those events"
             ));
         }
         actions.push(ActionDef {
@@ -855,6 +861,9 @@ fn positive(value: f64) -> bool {
     value.is_finite() && value > 0.0
 }
 
+/// The `event` values of `move_command`, `dock` and `undock`, so no action may use them.
+const RESERVED_ACTION_IDS: &[&str] = &["move", "dock", "undock"];
+
 pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id
@@ -1130,6 +1139,13 @@ entities = [\"mm1\"]
         let errors = errors_of(&text);
         assert!(errors.contains("unknown action 'fly' (known: pick)"), "{errors}");
         assert!(errors.contains("lists 'pick' twice"), "{errors}");
+    }
+
+    #[test]
+    fn rejects_reserved_action_ids() {
+        let errors = errors_of(&format!("{MINIMAL}\n[actions.dock]\n\n[actions.pick]\n"));
+        assert!(errors.contains("action 'dock' is reserved"), "{errors}");
+        assert!(!errors.contains("'pick'"), "{errors}");
     }
 
     #[test]

@@ -207,7 +207,7 @@ export function FloorView({
             className="action-flash"
             textAnchor="middle"
           >
-            {action.action}
+            {action.event}
           </text>
         ) : null;
       })}

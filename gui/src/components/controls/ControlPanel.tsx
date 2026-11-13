@@ -194,7 +194,7 @@ function MmCard({ def, view, color, scenario, selected, lastAction, onSelect, se
       )}
       {lastAction && (
         <div className="muted small last-action">
-          last action: {lastAction.action}
+          last action: {lastAction.event}
           {lastAction.at ? ` at ${machineLabel(scenario, lastAction.at)}` : ` at ${formatPoint(lastAction.x, lastAction.y)}`} ·{" "}
           {formatSimTime(lastAction.sim_ms)}
         </div>

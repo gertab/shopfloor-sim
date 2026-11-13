@@ -64,7 +64,7 @@ export function useSimulation(): Simulation {
         setLastActions((previous) => {
           const next = { ...previous };
           for (const action of actions) {
-            next[action.entity] = action;
+            next[action.device_id] = action;
           }
           return next;
         });

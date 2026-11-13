@@ -212,7 +212,7 @@ they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to mat
 | `... requires_machine` | false | Only while docked at a machine (within `dock_tolerance_m` of its dock) |
 | `... allowed_while_moving` | false | Otherwise the MM must be stopped |
 | `[<machines\|mobile_manipulators>.<id>.sensors.<name>]` | | A sensor mounted on that entity. Its id is `<id>.<name>`. |
-| `[sensors.<id>]` + `position = [x, y]` | | A free-standing sensor at a fixed spot. It is its own entity: `entity` = `<id>`. It takes the same keys as below. |
+| `[sensors.<id>]` + `position = [x, y]` | | A free-standing sensor at a fixed spot. It is its own entity: `device_id` = `<id>`. It takes the same keys as below. |
 | `... default`, `range` | required | Initial value and `[min, max]`. Readings are clamped to the range. |
 | `... kind` | `<name>` | Sensor type, e.g. `vibration`, `lidar` |
 | `... unit` | "" | Unit string |
@@ -229,11 +229,12 @@ they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to mat
 | `[output.sinks.<name>] type = "tcp", bind` | | Listen on `bind` (e.g. `127.0.0.1:9000`) and stream every event to each connected client as a length-prefixed JSON frame (see [Streaming over TCP](#streaming-over-tcp)). |
 | `[output.sinks.<name>] type = "mqtt", broker` | | Publish each event to the MQTT topics it matches, on the broker at `broker` (`host:port` or `mqtt://host:port`; port 1883 by default). See [Streaming over MQTT](#streaming-over-mqtt). |
 | `... qos`, `client_id` | 0, `shopfloor-<name>-<process id>` | MQTT quality of service (0, 1 or 2) and client id |
-| `[[output.sinks.<name>.topics]]` `topic`, `kinds`, `entities` | filters: everything | A topic and the events it carries: those whose `kind` is in `kinds` and whose `entity` is in `entities`. At least one is required. |
+| `[[output.sinks.<name>.topics]]` `topic`, `kinds`, `entities` | filters: everything | A topic and the events it carries: those whose `kind` is in `kinds` and whose `device_id` is in `entities`. At least one is required. |
 
 Rules worth knowing:
 - Entity ids use letters, digits, `_` and `-`.
 - Machines, MMs and free-standing sensors share one id namespace.
+- Action ids can't be `move`, `dock` or `undock`, since those are the `event` of other events.
 - Footprints, docks, starts and sensor positions must lie inside the floor.
 - Only free-standing sensors have a `position`. A mounted sensor is where its host is.
 - Periods must be at least `tick_ms`.
@@ -274,7 +275,7 @@ steps = [
 | `move_to = { mm, machine }` or `{ mm, point = [x, y] }` | Send the MM somewhere (it does not wait for arrival) |
 | `wait_idle = "mm1"` | Wait until the MM has no move in progress (it arrived, or was stopped) |
 | `wait_ms = N` | Wait N ms of simulation time |
-| `perform = { mm, action }` | Perform an action |
+| `perform = { mm, action }` or `{ mm, action, object }` | Perform an action. The optional `object` (e.g. `"dies"`) is reported in the `action` event. |
 | `set_sensor = { sensor, value }` | Set a sensor's value |
 | `set_sensor_noise = { sensor, std }` | Set a sensor's noise |
 | `pause_sensor = "mm1.vibration"` | Stop a sensor's readings, as if it had failed. It stays paused until resumed or the simulation is reset, even if the scene ends or is stopped. |
@@ -341,9 +342,9 @@ topic = "shopfloor/all"
 ```
 
 How it behaves:
-- **Routing:** an event goes to every topic it matches. It matches when its `kind` is in `kinds` and its `entity` is
-  in `entities`, and a missing filter matches everything.
-  - `sim` and `scene` events have no `entity`, so they only go to topics without an `entities` filter.
+- **Routing:** an event goes to every topic it matches. It matches when its `kind` is in `kinds` and its `device_id`
+  is in `entities`, and a missing filter matches everything.
+  - `sim` and `scene` events have no `device_id`, so they only go to topics without an `entities` filter.
   - Unknown kinds and entities are errors when the scenario loads, as are wildcards (`+`, `#`) in a topic name.
 - **Payload:** each message is one event, as the same JSON line the other outputs write. Messages are not retained.
 - **Either side can start first.**
@@ -373,33 +374,46 @@ Every event is **one flat JSON object** with the same envelope:
 
 | Field | Meaning |
 |---|---|
-| `v` | Schema version, currently `1` |
+| `v` | Schema version, currently `2` |
 | `seq` | Sequence number, +1 per event. It continues across Reset and restarts when a scenario is loaded. |
-| `ts` | Wall-clock time, epoch **milliseconds** (integer) |
+| `timestamp_ms` | Wall-clock time, epoch **milliseconds** (integer) |
 | `sim_ms` | Simulation time in ms. It excludes pauses and restarts at 0 on Reset. |
 | `kind` | One of the kinds below |
 
 | `kind` | When | Fields |
 |---|---|---|
-| `position` | Every `position_interval_ms` while an MM moves, plus once on arrival (with `speed_mps` 0). **Not emitted while idle.** | `entity`, `x`, `y`, `heading_rad`, `speed_mps` |
-| `move_command` | An MM gets a target | `entity`, `command_id`, `origin`, `from {x,y,at}`, `to {x,y,at}`, `distance_m`, `eta_ms`, `replaces` (previous `command_id` or null) |
-| `arrived` | An MM reaches its target | `entity`, `command_id`, `x`, `y`, `at` |
-| `stopped` | An MM is stopped before arriving | `entity`, `command_id`, `x`, `y`, `at`, `origin` |
-| `sensor` | Every `period_ms` per sensor | `sensor` (id), `entity` (host, or the sensor itself if free-standing), `sensor_kind`, `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
-| `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor`, `entity`, `sensor_kind`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
-| `action` | An MM performs an action (silent: nothing else changes) | `entity`, `action`, `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
+| `position` | Every `position_interval_ms` while an MM moves, plus once on arrival (with `speed_mps` 0). **Not emitted while idle.** | `device_id`, `x`, `y`, `heading_rad`, `speed_mps` |
+| `move_command` | An MM gets a target | `device_id`, `event` (`"move"`), `source`, `destination` (machine ids or null), `command_id`, `origin`, `from {x,y}`, `to {x,y}`, `distance_m`, `eta_ms`, `replaces` (previous `command_id` or null) |
+| `arrived` | An MM reaches its target | `device_id`, `command_id`, `x`, `y`, `at` |
+| `stopped` | An MM is stopped before arriving | `device_id`, `command_id`, `x`, `y`, `at`, `origin` |
+| `undock` | A docked MM starts a move away from its machine, just before the `move_command` | `device_id`, `event` (`"undock"`), `target` (the machine it leaves), `command_id` (the move), `x`, `y` |
+| `dock` | An MM comes to rest at a machine's dock, just after the `arrived` or `stopped` | `device_id`, `event` (`"dock"`), `target` (the machine), `command_id` (the move), `x`, `y` |
+| `sensor` | Every `period_ms` per sensor | `sensor` (id), `device_id` (host, or the sensor itself if free-standing), `type` (the sensor's kind), `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
+| `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor`, `device_id`, `type`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
+| `action` | An MM performs an action (silent: nothing else changes) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
 | `sim` | Started, paused, resumed or reset | `state`, `scenario` |
 | `scene` | A scene starts, restarts (next iteration), finishes, is stopped, or fails | `scene`, `state` (`started`/`restarted`/`finished`/`stopped`/`failed`), `iteration`, `error` (why it failed, else null) |
 
-`at` is the machine id when the point is within `dock_tolerance_m` of that machine's dock, otherwise `null`. So
+`at`, `source` and `destination` are the machine id when the point is within `dock_tolerance_m` of that machine's
+dock, otherwise `null`. An MM that starts at a machine (`start_at`) begins docked, without a `dock` event. A move to
+where the MM already is, or a new target for an MM that is already moving, emits neither `undock` nor `dock`. So
 "mm1 moves from machine1 to machine2, then picks there" is:
 
 ```json
-{"v":1,"seq":41,"ts":1761730004200,"sim_ms":4200,"kind":"move_command","entity":"mm1","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0,"at":"machine1"},"to":{"x":10.0,"y":8.0,"at":"machine2"},"distance_m":6.0,"eta_ms":7500,"replaces":null}
-{"v":1,"seq":42,"ts":1761730004300,"sim_ms":4300,"kind":"position","entity":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
-{"v":1,"seq":43,"ts":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","entity":"mm1","sensor_kind":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
-{"v":1,"seq":88,"ts":1761730012300,"sim_ms":12300,"kind":"action","entity":"mm1","action":"pick","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
+{"v":2,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}
+{"v":2,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}
+{"v":2,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
+{"v":2,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
+{"v":2,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}
+{"v":2,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}
+{"v":2,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
 ```
+
+The keys follow the [Liminal Desk](https://github.com/duncanatt/liminal-desk) traces wherever they describe the same thing
+(`device_id`, `event`, `type`, `target`, `object`, `source`, `destination`, `timestamp_ms`). Every key of a trace
+payload is in the matching event, so a rule written for a trace also works on the simulator's stream. The one
+exception is lidar's `target`. [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md) lists what changed from v1 and how
+to update a consumer.
 
 For a longer sample, [scenarios/sample-floor-events.jsonl](scenarios/sample-floor-events.jsonl) has the first 12.5 s
 (318 events) of the sample floor's `vibration_fault` scene:
@@ -419,13 +433,14 @@ The exact strings are pinned in [core/src/event.rs](core/src/event.rs).
 
 Schema version rule:
 - **Adding** a kind or a field keeps `v`. Consumers should ignore what they don't know.
-- **Renaming, removing or retyping** a field bumps `v`.
+- **Renaming, removing or retyping** a field bumps `v`. v2 renamed `ts`, `entity`, `sensor_kind` and an action's
+  `action` (see [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md)).
 
 Notes for consumers:
 - Route on the top-level fields, starting with `kind`. No field is nested deeper than `from` / `to`.
 - Measurements (`x`, `y`, `value`, ...) are always JSON floats, even when whole (`1.0`). If a consumer compares
   strictly, compare numbers with `>`, `<`, `>=`, `<=` rather than equality.
-- `ts` can be used directly as the event time.
+- `timestamp_ms` can be used directly as the event time.
 - `sensor_set`, `move_command` and `action` are ground truth: what the operator (or a script) did and when. That's
   useful for labelling, and it means a recording contains its own script.
 
@@ -454,7 +469,8 @@ parameters = { broker_url = "mqtt://127.0.0.1:1883", topics = ["shopfloor/sensor
 ```
 
 Liminal's `shopfloor` branch has ready-made pipelines for the bundled scenarios in
-[`config/examples/`](https://github.com/gertab/liminal/tree/shopfloor/config/examples):
+[`config/examples/`](https://github.com/gertab/liminal/tree/shopfloor/config/examples). They were written for schema v1,
+so they need the renames in [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md#updating-your-liminal-configs) first:
 
 | Liminal config | Scenario | What it does |
 |---|---|---|
@@ -477,8 +493,9 @@ Writing your own pipeline:
 - `tcp_input` makes each whole frame the message payload and keeps no topic, so route on the event's fields, for
   example a `rule` with `condition = { field_path = "kind", operation = "equals", value = "sensor" }`.
 - Liminal's `equals` is strict (`1` ≠ `1.0`), and measurements are floats, so compare numbers with `>`, `<`, `>=`, `<=`.
-- Use `ts` as the event time: `timing.event_time_field = "ts"`.
-- Route actions with two rules: `kind` equals `"action"`, then `action` equals `"pick"`.
+- Use `timestamp_ms` as the event time: `timing.event_time_field = "timestamp_ms"`.
+- Route actions on `event`, e.g. `event` equals `"pick"`. No action can be called `move`, `dock` or `undock`, so this
+  matches only actions.
 
 How it behaves:
 - Liminal reconnects every second until the simulator is listening. It logs each failed attempt as an error, which is

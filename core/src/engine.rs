@@ -11,7 +11,10 @@
 //! used to stamp events, so tests and faster-than-real-time runs behave identically.
 
 use crate::command::{CommandEnvelope, Control, Origin, SimCommand, Target};
-use crate::event::{EventBody, Lifecycle, Place, SCHEMA_VERSION, SceneState, SimEvent};
+use crate::event::{
+    DockEvent, EventBody, Lifecycle, MoveEvent, Point, SCHEMA_VERSION, SceneState, SimEvent,
+    UndockEvent,
+};
 use crate::geometry::{Vec2, path_length, round_to};
 use crate::motion::{PathPlanner, StraightLine};
 use crate::scenario::{HostKind, MmDef, Scenario};
@@ -60,6 +63,9 @@ struct MmState {
     position: Vec2,
     heading: f64,
     motion: Option<Motion>,
+    /// The machine it is docked at: set by a `dock` event (or starting at a machine), cleared by an
+    /// `undock`.
+    docked: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +125,14 @@ pub struct ActionAvailability {
     pub available: bool,
     /// Why it isn't available (`None` when it is).
     pub reason: Option<String>,
+}
+
+/// A point on the floor, with the machine it is docked at (if any).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Place {
+    pub x: f64,
+    pub y: f64,
+    pub at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -245,7 +259,9 @@ impl Engine {
             SimCommand::SetSensorPaused { sensor, paused } => {
                 self.set_sensor(&sensor, None, None, Some(paused), origin)?
             }
-            SimCommand::Perform { mm, action } => self.perform(&mm, &action, origin)?,
+            SimCommand::Perform { mm, action, object } => {
+                self.perform(&mm, &action, object, origin)?
+            }
         };
         Ok(self.events(ts, bodies))
     }
@@ -292,12 +308,13 @@ impl Engine {
                 mm.motion = None;
                 bodies.push(position_body(&def.id, mm, 0.0));
                 bodies.push(EventBody::Arrived {
-                    entity: def.id.clone(),
+                    device_id: def.id.clone(),
                     command_id,
                     x: round_to(mm.position.x, POSITION_DECIMALS),
                     y: round_to(mm.position.y, POSITION_DECIMALS),
-                    at,
+                    at: at.clone(),
                 });
+                bodies.extend(dock(&def.id, mm, command_id, at));
             } else if now >= motion.next_position_ms {
                 while motion.next_position_ms <= now {
                     motion.next_position_ms += interval_ms;
@@ -338,8 +355,8 @@ impl Engine {
             };
             bodies.push(EventBody::Sensor {
                 sensor: def.id.clone(),
-                entity: def.host.clone(),
-                sensor_kind: def.kind.clone(),
+                device_id: def.host.clone(),
+                sensor_type: def.kind.clone(),
                 value,
                 unit: def.unit.clone(),
                 x: round_to(at.x, POSITION_DECIMALS),
@@ -575,6 +592,9 @@ impl Engine {
                 position: def.start,
                 heading: def.start_heading_rad,
                 motion: None,
+                docked: scenario
+                    .machine_docked_at(def.start)
+                    .map(|machine| machine.id.clone()),
             })
             .collect();
         self.sensors = scenario
@@ -626,11 +646,11 @@ impl Engine {
         };
 
         let mm = &self.mms[index];
-        let from = Place {
+        let from = Point {
             x: round_to(mm.position.x, POSITION_DECIMALS),
             y: round_to(mm.position.y, POSITION_DECIMALS),
-            at: self.docked_at(mm.position),
         };
+        let source = self.docked_at(mm.position);
         let to = Place {
             x: round_to(destination.x, POSITION_DECIMALS),
             y: round_to(destination.y, POSITION_DECIMALS),
@@ -642,27 +662,44 @@ impl Engine {
         let command_id = self.next_command_id;
         self.next_command_id += 1;
 
-        let mut bodies = vec![EventBody::MoveCommand {
-            entity: def.id.clone(),
+        let mut bodies = Vec::new();
+        let mm = &mut self.mms[index];
+        if distance_m > ARRIVAL_EPS_M
+            && let Some(machine) = mm.docked.take()
+        {
+            bodies.push(EventBody::Undock {
+                device_id: def.id.clone(),
+                event: UndockEvent::Undock,
+                target: machine,
+                command_id,
+                x: from.x,
+                y: from.y,
+            });
+        }
+        bodies.push(EventBody::MoveCommand {
+            device_id: def.id.clone(),
+            event: MoveEvent::Move,
+            source,
+            destination: to.at.clone(),
             command_id,
             origin,
             from,
-            to: to.clone(),
+            to: Point { x: to.x, y: to.y },
             distance_m: round_to(distance_m, POSITION_DECIMALS),
             eta_ms: eta_ms(distance_m, def.max_speed_mps),
             replaces,
-        }];
+        });
 
-        let mm = &mut self.mms[index];
         if distance_m <= ARRIVAL_EPS_M {
             mm.motion = None;
             bodies.push(EventBody::Arrived {
-                entity: def.id.clone(),
+                device_id: def.id.clone(),
                 command_id,
                 x: to.x,
                 y: to.y,
-                at: to.at,
+                at: to.at.clone(),
             });
+            bodies.extend(dock(&def.id, mm, command_id, to.at));
         } else {
             mm.motion = Some(Motion {
                 command_id,
@@ -681,14 +718,17 @@ impl Engine {
             return Ok(Vec::new());
         };
         let position = self.mms[index].position;
-        Ok(vec![EventBody::Stopped {
-            entity: mm_id.to_string(),
+        let at = self.docked_at(position);
+        let mut bodies = vec![EventBody::Stopped {
+            device_id: mm_id.to_string(),
             command_id: motion.command_id,
             x: round_to(position.x, POSITION_DECIMALS),
             y: round_to(position.y, POSITION_DECIMALS),
-            at: self.docked_at(position),
+            at: at.clone(),
             origin,
-        }])
+        }];
+        bodies.extend(dock(mm_id, &mut self.mms[index], motion.command_id, at));
+        Ok(bodies)
     }
 
     fn set_sensor(
@@ -735,8 +775,8 @@ impl Engine {
         }
         Ok(vec![EventBody::SensorSet {
             sensor: def.id.clone(),
-            entity: def.host.clone(),
-            sensor_kind: def.kind.clone(),
+            device_id: def.host.clone(),
+            sensor_type: def.kind.clone(),
             setpoint: sensor.setpoint,
             noise_std: sensor.noise_std,
             previous_setpoint,
@@ -749,6 +789,7 @@ impl Engine {
         &mut self,
         mm_id: &str,
         action: &str,
+        object: Option<String>,
         origin: Origin,
     ) -> anyhow::Result<Vec<EventBody>> {
         let index = self.mm_index(mm_id)?;
@@ -759,8 +800,9 @@ impl Engine {
         self.next_command_id += 1;
         let position = self.mms[index].position;
         Ok(vec![EventBody::Action {
-            entity: mm_id.to_string(),
-            action: action.to_string(),
+            device_id: mm_id.to_string(),
+            event: action.to_string(),
+            object,
             command_id,
             x: round_to(position.x, POSITION_DECIMALS),
             y: round_to(position.y, POSITION_DECIMALS),
@@ -828,7 +870,7 @@ impl Engine {
         SimEvent {
             v: SCHEMA_VERSION,
             seq: self.seq,
-            ts,
+            timestamp_ms: ts,
             sim_ms: self.sim_ms,
             body,
         }
@@ -841,12 +883,29 @@ impl Engine {
 
 fn position_body(id: &str, mm: &MmState, speed_mps: f64) -> EventBody {
     EventBody::Position {
-        entity: id.to_string(),
+        device_id: id.to_string(),
         x: round_to(mm.position.x, POSITION_DECIMALS),
         y: round_to(mm.position.y, POSITION_DECIMALS),
         heading_rad: round_to(mm.heading, HEADING_DECIMALS),
         speed_mps,
     }
+}
+
+/// The `dock` event for an MM that came to rest `at` a machine, unless it was docked there already.
+fn dock(id: &str, mm: &mut MmState, command_id: u64, at: Option<String>) -> Option<EventBody> {
+    let machine = at?;
+    if mm.docked.as_ref() == Some(&machine) {
+        return None;
+    }
+    mm.docked = Some(machine.clone());
+    Some(EventBody::Dock {
+        device_id: id.to_string(),
+        event: DockEvent::Dock,
+        target: machine,
+        command_id,
+        x: round_to(mm.position.x, POSITION_DECIMALS),
+        y: round_to(mm.position.y, POSITION_DECIMALS),
+    })
 }
 
 fn scene_body(id: &str, iteration: u32, state: SceneState, error: Option<String>) -> EventBody {

@@ -167,28 +167,31 @@ export type Origin = "ui" | "scene" | "api";
 interface Envelope {
   v: number;
   seq: number;
-  ts: number;
+  timestamp_ms: number;
   sim_ms: number;
 }
 
 export type SimEvent = Envelope &
   (
-    | { kind: "position"; entity: string; x: number; y: number; heading_rad: number; speed_mps: number }
+    | { kind: "position"; device_id: string; x: number; y: number; heading_rad: number; speed_mps: number }
     | {
         kind: "move_command";
-        entity: string;
+        device_id: string;
+        event: "move";
+        source: string | null;
+        destination: string | null;
         command_id: number;
         origin: Origin;
-        from: Place;
-        to: Place;
+        from: Vec2;
+        to: Vec2;
         distance_m: number;
         eta_ms: number;
         replaces: number | null;
       }
-    | { kind: "arrived"; entity: string; command_id: number; x: number; y: number; at: string | null }
+    | { kind: "arrived"; device_id: string; command_id: number; x: number; y: number; at: string | null }
     | {
         kind: "stopped";
-        entity: string;
+        device_id: string;
         command_id: number;
         x: number;
         y: number;
@@ -196,10 +199,19 @@ export type SimEvent = Envelope &
         origin: Origin;
       }
     | {
+        kind: "undock" | "dock";
+        device_id: string;
+        event: "undock" | "dock";
+        target: string;
+        command_id: number;
+        x: number;
+        y: number;
+      }
+    | {
         kind: "sensor";
         sensor: string;
-        entity: string;
-        sensor_kind: string;
+        device_id: string;
+        type: string;
         value: number;
         unit: string;
         x: number;
@@ -208,8 +220,8 @@ export type SimEvent = Envelope &
     | {
         kind: "sensor_set";
         sensor: string;
-        entity: string;
-        sensor_kind: string;
+        device_id: string;
+        type: string;
         setpoint: number;
         noise_std: number;
         previous_setpoint: number;
@@ -218,8 +230,10 @@ export type SimEvent = Envelope &
       }
     | {
         kind: "action";
-        entity: string;
-        action: string;
+        device_id: string;
+        /** The action's id, e.g. "pick". */
+        event: string;
+        object: string | null;
         command_id: number;
         x: number;
         y: number;
@@ -243,6 +257,8 @@ export const EVENT_KINDS: EventKind[] = [
   "move_command",
   "arrived",
   "stopped",
+  "undock",
+  "dock",
   "sensor",
   "sensor_set",
   "action",
@@ -260,6 +276,6 @@ export type SimCommand =
   | { type: "set_sensor"; sensor: string; value: number }
   | { type: "set_sensor_noise"; sensor: string; std: number }
   | { type: "set_sensor_paused"; sensor: string; paused: boolean }
-  | { type: "perform"; mm: string; action: string };
+  | { type: "perform"; mm: string; action: string; object?: string };
 
 export type Control = "pause" | "resume" | "reset" | "stop_scene" | { play_scene: string };

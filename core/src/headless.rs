@@ -174,7 +174,7 @@ mod tests {
         assert!(events.iter().any(|e| e.kind() == "action"));
 
         // Stamped as if it ran in real time; sequence numbers are contiguous.
-        assert!(events.iter().all(|e| e.ts == 1_000_000 + e.sim_ms));
+        assert!(events.iter().all(|e| e.timestamp_ms == 1_000_000 + e.sim_ms));
         let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
         assert_eq!(seqs, (1..=events.len() as u64).collect::<Vec<_>>());
     }

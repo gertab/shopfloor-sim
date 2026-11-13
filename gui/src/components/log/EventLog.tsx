@@ -1,6 +1,6 @@
 import { Braces, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { KIND_LABELS, describeEvent, eventEntity, formatSimTime } from "../../format";
+import { KIND_LABELS, describeEvent, eventDeviceId, formatSimTime } from "../../format";
 import { EVENT_KINDS } from "../../types";
 import type { EventKind, Scenario, SimEvent } from "../../types";
 
@@ -38,7 +38,7 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
   const rows = useMemo(() => {
     const filtered = events.filter(
       (event) =>
-        !hiddenKinds.has(event.kind) && (entity === "all" || eventEntity(event) === entity),
+        !hiddenKinds.has(event.kind) && (entity === "all" || eventDeviceId(event) === entity),
     );
     return filtered.slice(-MAX_ROWS);
   }, [events, hiddenKinds, entity]);
@@ -121,7 +121,7 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
               <div key={event.seq} className="event-row" title={JSON.stringify(event)}>
                 <span className="event-time">{formatSimTime(event.sim_ms)}</span>
                 <span className={`event-kind kind-${event.kind}`}>{KIND_LABELS[event.kind]}</span>
-                <span className="event-entity">{eventEntity(event) ?? ""}</span>
+                <span className="event-entity">{eventDeviceId(event) ?? ""}</span>
                 <span className="event-text">{describeEvent(event, scenario)}</span>
               </div>
             ),

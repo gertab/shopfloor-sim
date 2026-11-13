@@ -5,6 +5,8 @@ export const KIND_LABELS: Record<EventKind, string> = {
   move_command: "move",
   arrived: "arrived",
   stopped: "stopped",
+  undock: "undock",
+  dock: "dock",
   sensor: "sensor",
   sensor_set: "sensor set",
   action: "action",
@@ -53,14 +55,14 @@ export function machineLabel(scenario: Scenario | null, id: string | null): stri
   return scenario?.machines.find((machine) => machine.id === id)?.label ?? id;
 }
 
-function describePlace(scenario: Scenario | null, place: { x: number; y: number; at: string | null }) {
-  const label = machineLabel(scenario, place.at);
-  return label ? `${label} ${formatPoint(place.x, place.y)}` : formatPoint(place.x, place.y);
+function describePlace(scenario: Scenario | null, point: { x: number; y: number }, at: string | null) {
+  const label = machineLabel(scenario, at);
+  return label ? `${label} ${formatPoint(point.x, point.y)}` : formatPoint(point.x, point.y);
 }
 
-/** The entity an event is about (for filtering). */
-export function eventEntity(event: SimEvent): string | null {
-  return event.kind === "sim" || event.kind === "scene" ? null : event.entity;
+/** The machine, MM or sensor an event is about (for filtering). */
+export function eventDeviceId(event: SimEvent): string | null {
+  return event.kind === "sim" || event.kind === "scene" ? null : event.device_id;
 }
 
 /** One-line human summary of an event. */
@@ -70,21 +72,25 @@ export function describeEvent(event: SimEvent, scenario: Scenario | null): strin
       return `${formatPoint(event.x, event.y)}  heading ${((event.heading_rad * 180) / Math.PI).toFixed(0)}°  ${event.speed_mps.toFixed(2)} m/s`;
     case "move_command":
       return (
-        `#${event.command_id} ${describePlace(scenario, event.from)} -> ${describePlace(scenario, event.to)}` +
+        `#${event.command_id} ${describePlace(scenario, event.from, event.source)} -> ${describePlace(scenario, event.to, event.destination)}` +
         `  ${event.distance_m.toFixed(1)} m, ETA ${(event.eta_ms / 1000).toFixed(1)} s` +
         (event.replaces !== null ? `  (replaces #${event.replaces})` : "") +
         `  [${event.origin}]`
       );
     case "arrived":
-      return `#${event.command_id} at ${describePlace(scenario, event)}`;
+      return `#${event.command_id} at ${describePlace(scenario, event, event.at)}`;
     case "stopped":
-      return `#${event.command_id} stopped at ${describePlace(scenario, event)}  [${event.origin}]`;
+      return `#${event.command_id} stopped at ${describePlace(scenario, event, event.at)}  [${event.origin}]`;
+    case "undock":
+      return `#${event.command_id} left ${describePlace(scenario, event, event.target)}`;
+    case "dock":
+      return `#${event.command_id} docked at ${describePlace(scenario, event, event.target)}`;
     case "sensor":
       return `${event.sensor} = ${formatValue(event.value)} ${event.unit}  @ ${formatPoint(event.x, event.y)}`;
     case "sensor_set":
       return `${event.sensor} setpoint ${formatValue(event.previous_setpoint)} -> ${formatValue(event.setpoint)}, noise σ ${formatValue(event.noise_std)}${event.paused ? ", paused" : ""}  [${event.origin}]`;
     case "action":
-      return `#${event.command_id} ${event.action} at ${describePlace(scenario, event)}  [${event.origin}]`;
+      return `#${event.command_id} ${event.event}${event.object ? ` ${event.object}` : ""} at ${describePlace(scenario, event, event.at)}  [${event.origin}]`;
     case "scene":
       return `${event.scene} ${event.state} (iteration ${event.iteration})${event.error ? `: ${event.error}` : ""}`;
     case "sim":

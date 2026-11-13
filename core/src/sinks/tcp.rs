@@ -160,11 +160,12 @@ mod tests {
         SimEvent {
             v: SCHEMA_VERSION,
             seq,
-            ts: 1000 + seq,
+            timestamp_ms: 1000 + seq,
             sim_ms: seq * 20,
             body: EventBody::Action {
-                entity: "mm1".into(),
-                action: "pick".into(),
+                device_id: "mm1".into(),
+                event: "pick".into(),
+                object: None,
                 command_id: seq,
                 x: 4.0,
                 y: 8.0,

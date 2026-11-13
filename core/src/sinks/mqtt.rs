@@ -240,7 +240,7 @@ mod tests {
         SimEvent {
             v: SCHEMA_VERSION,
             seq,
-            ts: 1000 + seq,
+            timestamp_ms: 1000 + seq,
             sim_ms: seq * 20,
             body,
         }
@@ -251,8 +251,8 @@ mod tests {
             seq,
             EventBody::Sensor {
                 sensor: "mm1.vibration".into(),
-                entity: "mm1".into(),
-                sensor_kind: "vibration".into(),
+                device_id: "mm1".into(),
+                sensor_type: "vibration".into(),
                 value: 1.2,
                 unit: "g".into(),
                 x: 4.0,
@@ -261,12 +261,13 @@ mod tests {
         )
     }
 
-    fn pick(seq: u64, entity: &str) -> SimEvent {
+    fn pick(seq: u64, device_id: &str) -> SimEvent {
         event(
             seq,
             EventBody::Action {
-                entity: entity.into(),
-                action: "pick".into(),
+                device_id: device_id.into(),
+                event: "pick".into(),
+                object: None,
                 command_id: seq,
                 x: 4.0,
                 y: 8.0,

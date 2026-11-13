@@ -66,6 +66,8 @@ pub struct MoveToSpec {
 pub struct PerformSpec {
     pub mm: String,
     pub action: String,
+    /// What is picked, placed, ..., reported in the `action` event.
+    pub object: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,7 +135,10 @@ impl Step {
                     Target::Point { x, y } => format!("move {mm} -> ({x:.1}, {y:.1})"),
                 },
                 SimCommand::Stop { mm } => format!("stop {mm}"),
-                SimCommand::Perform { mm, action } => format!("{mm}: {action}"),
+                SimCommand::Perform { mm, action, object } => match object {
+                    Some(object) => format!("{mm}: {action} {object}"),
+                    None => format!("{mm}: {action}"),
+                },
                 SimCommand::SetSensor { sensor, value } => format!("set {sensor} = {value}"),
                 SimCommand::SetSensorNoise { sensor, std } => format!("set {sensor} noise σ = {std}"),
                 SimCommand::SetSensorPaused { sensor, paused: true } => format!("pause {sensor}"),
@@ -259,7 +264,7 @@ fn resolve_step(spec: &StepSpec, scenario: &Scenario) -> Result<Step, String> {
             mm_def(scenario, mm)?;
             Step::Command(SimCommand::Stop { mm: mm.clone() })
         }
-        StepSpec::Perform(PerformSpec { mm, action }) => {
+        StepSpec::Perform(PerformSpec { mm, action, object }) => {
             let def = mm_def(scenario, mm)?;
             scenario
                 .action(action)
@@ -270,6 +275,7 @@ fn resolve_step(spec: &StepSpec, scenario: &Scenario) -> Result<Step, String> {
             Step::Command(SimCommand::Perform {
                 mm: mm.clone(),
                 action: action.clone(),
+                object: object.clone(),
             })
         }
         StepSpec::SetSensor(SetSensorSpec { sensor, value }) => {
@@ -437,6 +443,7 @@ mod tests {
                   { wait_idle = "mm1" },
                   { move_to = { mm = "mm1", machine = "m1" } },
                   { perform = { mm = "mm1", action = "pick" } },
+                  { perform = { mm = "mm1", action = "pick", object = "dies" } },
                   { set_sensor = { sensor = "mm1.vibration", value = 1.0 } },
                   { set_sensor_noise = { sensor = "mm1.vibration", std = 0.1 } },
                   { stop = "mm1" },
@@ -463,7 +470,7 @@ mod tests {
         assert_eq!((demo.id.as_str(), demo.label.as_str()), ("demo", "demo"));
         assert_eq!(demo.repeat, super::Repeat::Once);
         assert_eq!(demo.tracks[0].name, "track 1");
-        assert_eq!(demo.tracks[0].steps.len(), 8);
+        assert_eq!(demo.tracks[0].steps.len(), 9);
         let describe: Vec<String> = demo.tracks[0]
             .steps
             .iter()
@@ -476,6 +483,7 @@ mod tests {
                 "wait until mm1 is idle",
                 "move mm1 -> m1",
                 "mm1: pick",
+                "mm1: pick dies",
                 "set mm1.vibration = 1",
                 "set mm1.vibration noise σ = 0.1",
                 "stop mm1",
