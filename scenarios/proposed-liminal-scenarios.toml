@@ -1,0 +1,464 @@
+# Scenario floor for Liminal's scenario examples (config/shopfloor/config_scenario_*.toml in Liminal).
+#
+# A small factory cell whose scenes produce what those configs detect: noise exposure over a shift, temperature
+# changes, a vibration anomaly, a part picked but not placed, a stocker that overfills and runs empty, and the
+# normal traffic for an odometer, utilisation and downsampling.
+#
+#   docker run -it -p 1883:1883 eclipse-mosquitto        # an MQTT broker, first
+#   cargo run --bin shopfloor -- run scenarios/proposed-liminal-scenarios.toml --scene shift
+#
+# `shift` plays every episode in one 2-minute run (it stands for an 8-hour shift in the noise example). Each episode
+# also has its own scene, of 20-40 s. Events are published to MQTT topics under factory/ on the broker at
+# 127.0.0.1:1883 (see the Output section), and each Liminal config subscribes to the ones it needs.
+#
+# Units: metres, seconds.
+
+name = "Proposed Liminal scenarios"
+
+[sim]
+tick_ms = 20
+seed = 7
+dock_tolerance_m = 0.9
+
+[floor]
+width_m = 20.0
+height_m = 12.0
+grid_m = 1.0
+
+# --- Machines ---------------------------------------------------------------------------------
+
+[machines.encaser]
+label = "Encaser"
+position = [4.0, 9.5]
+size = [3.0, 2.0]
+# dock: 0.5 m below the footprint, (4.0, 8.0)
+
+[machines.deflasher]
+label = "Deflasher"
+position = [4.0, 4.0]
+size = [3.0, 2.0]
+# dock: (4.0, 2.5)
+
+[machines.deflasher.sensors.temperature]
+unit = "°C"
+default = 45.0
+range = [0.0, 120.0]
+period_ms = 1000
+noise_std = 0.1
+
+[machines.stocker]
+label = "Stocker"
+position = [16.5, 4.0]
+size = [2.5, 3.0]
+dock = [14.6, 4.0]       # serviced from its left side
+
+[machines.packing]
+label = "Packing"
+position = [16.5, 9.5]
+size = [2.5, 2.0]
+dock = [14.6, 9.5]
+
+# --- Mobile manipulators: their sensors report every 0.5 s, which Liminal also uses as a clock --
+
+[mobile_manipulators.mm1]
+label = "MM 1"
+start_at = "encaser"
+max_speed_mps = 1.5
+radius_m = 0.35
+
+[mobile_manipulators.mm1.sensors.vibration]
+unit = "g"
+default = 0.1
+range = [0.0, 2.0]
+period_ms = 500
+noise_std = 0.01
+
+[mobile_manipulators.mm2]
+label = "MM 2"
+start_at = "packing"
+max_speed_mps = 1.2
+radius_m = 0.35
+
+[mobile_manipulators.mm2.sensors.vibration_1]
+label = "Vibration 1"
+kind = "vibration"
+unit = "g"
+default = 0.10
+range = [0.0, 2.0]
+period_ms = 500
+noise_std = 0.01
+
+[mobile_manipulators.mm2.sensors.vibration_2]
+label = "Vibration 2"
+kind = "vibration"
+unit = "g"
+default = 0.12
+range = [0.0, 2.0]
+period_ms = 500
+noise_std = 0.01
+
+[mobile_manipulators.mm2.sensors.vibration_3]
+label = "Vibration 3"
+kind = "vibration"
+unit = "g"
+default = 0.14
+range = [0.0, 2.0]
+period_ms = 500
+noise_std = 0.01
+
+# --- Free-standing sensors --------------------------------------------------------------------
+
+[sensors.noise_level]
+label = "Noise level"
+position = [10.0, 2.0]
+kind = "sound"
+unit = "dB(A)"
+default = 78.0
+range = [30.0, 130.0]
+period_ms = 1000
+noise_std = 1.0
+
+[sensors.hall_temperature]
+label = "Hall temperature"
+position = [10.0, 11.0]
+kind = "temperature"
+unit = "°C"
+default = 21.0
+range = [-10.0, 50.0]
+period_ms = 1000
+noise_std = 0.05
+
+# --- Actions ----------------------------------------------------------------------------------
+
+[actions.pick]
+label = "Pick"
+requires_machine = true
+
+[actions.place]
+label = "Place"
+requires_machine = true
+
+# --- Scenes -----------------------------------------------------------------------------------
+
+# The normal cycle (about 25 s): mm1 carries parts encaser -> deflasher -> stocker; mm2 takes them from the stocker
+# to packing. The stocker gets one part and loses one per iteration, so it stays at 2-3.
+[scenes.production]
+label = "Production"
+loop = true
+
+[[scenes.production.tracks]]
+name = "mm1 shuttle"
+steps = [
+  { move_to = { mm = "mm1", machine = "encaser" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "pick" } },
+  { wait_ms = 1000 },
+  { move_to = { mm = "mm1", machine = "deflasher" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm1", machine = "stocker" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm1", machine = "encaser" } },
+  { wait_idle = "mm1" },
+]
+
+[[scenes.production.tracks]]
+name = "mm2 to packing"
+steps = [
+  { wait_ms = 15000 },
+  { move_to = { mm = "mm2", machine = "stocker" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm2", machine = "packing" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "place" } },
+]
+
+# Noise exposure: 92 dB(A) for 30 s, then back to 78 (40 s).
+[scenes.noisy_period]
+label = "Noisy period"
+
+[[scenes.noisy_period.tracks]]
+steps = [
+  { wait_ms = 5000 },
+  { set_sensor = { sensor = "noise_level", value = 92.0 } },
+  { wait_ms = 30000 },
+  { set_sensor = { sensor = "noise_level", value = 78.0 } },
+  { wait_ms = 5000 },
+]
+
+# The deflasher heats up by 6 °C and is back within about 6 s: within any 15 s the change is over 5 °C, though readings
+# 15 s apart barely differ. mm1 then places while the temperature is still settling (too early), and again once it has
+# settled (about 40 s).
+[scenes.deflasher_heat_spike]
+label = "Deflasher heat spike"
+
+[[scenes.deflasher_heat_spike.tracks]]
+steps = [
+  { move_to = { mm = "mm1", machine = "deflasher" } },
+  { wait_idle = "mm1" },
+  { wait_ms = 12000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 48.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 51.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 48.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 45.0 } },
+  { wait_ms = 4000 },
+  { perform = { mm = "mm1", action = "place" } },     # too early: still settling
+  { wait_ms = 12000 },
+  { perform = { mm = "mm1", action = "place" } },     # settled
+  { wait_ms = 1000 },
+]
+
+# A door opens: the hall warms by 1.5 °C for 10 s (ASHRAE 55 allows 1.1 °C in any 15 min) (20 s).
+[scenes.hall_draft]
+label = "Hall draft"
+
+[[scenes.hall_draft.tracks]]
+steps = [
+  { wait_ms = 5000 },
+  { set_sensor = { sensor = "hall_temperature", value = 22.5 } },
+  { wait_ms = 10000 },
+  { set_sensor = { sensor = "hall_temperature", value = 21.0 } },
+  { wait_ms = 5000 },
+]
+
+# mm2's vibration 1 rises from 0.10 g to 0.14 g (4 σ) for 5 s, after a 25 s baseline: far below any fixed alarm level,
+# but unusual for it (35 s).
+[scenes.vibration_anomaly]
+label = "Vibration anomaly"
+
+[[scenes.vibration_anomaly.tracks]]
+steps = [
+  { wait_ms = 25000 },
+  { set_sensor = { sensor = "mm2.vibration_1", value = 0.14 } },
+  { wait_ms = 5000 },
+  { set_sensor = { sensor = "mm2.vibration_1", value = 0.10 } },
+  { wait_ms = 5000 },
+]
+
+# mm1 picks a part at the encaser, then waits 20 s elsewhere before placing it (about 30 s).
+[scenes.lost_part]
+label = "Part picked but not placed"
+
+[[scenes.lost_part.tracks]]
+steps = [
+  { wait_ms = 2000 },     # time for Liminal to connect, so it sees the pick
+  { move_to = { mm = "mm1", machine = "encaser" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "pick" } },
+  { move_to = { mm = "mm1", point = [10.0, 7.0] } },
+  { wait_idle = "mm1" },
+  { wait_ms = 20000 },
+  { move_to = { mm = "mm1", machine = "deflasher" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+]
+
+# The stocker (2 parts at the start, room for 4) gets 3 parts: full, then over-full. mm2 then picks 6: empty, and one
+# pick too many (about 25 s).
+[scenes.stocker_full_empty]
+label = "Stocker full and empty"
+
+[[scenes.stocker_full_empty.tracks]]
+name = "mm1 fills"
+steps = [
+  { move_to = { mm = "mm1", machine = "stocker" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm1", machine = "encaser" } },
+  { wait_idle = "mm1" },
+]
+
+[[scenes.stocker_full_empty.tracks]]
+name = "mm2 empties"
+steps = [
+  { wait_ms = 11000 },
+  { move_to = { mm = "mm2", machine = "stocker" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm2", machine = "packing" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "place" } },
+]
+
+# Every episode in one 2-minute run (120 s), standing for an 8-hour shift: a production cycle, the heat spike with an
+# early place, a part held too long, the stocker overfilled and emptied, and on the sensor side the noisy period,
+# the hall draft and the vibration anomaly.
+[scenes.shift]
+label = "Shift (everything)"
+
+[[scenes.shift.tracks]]
+name = "mm1"
+steps = [
+  # A production cycle.
+  { perform = { mm = "mm1", action = "pick" } },
+  { wait_ms = 1000 },
+  { move_to = { mm = "mm1", machine = "deflasher" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm1", machine = "stocker" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 500 },
+  # Heat spike at the deflasher, an early place, then one once it has settled.
+  { move_to = { mm = "mm1", machine = "deflasher" } },
+  { wait_idle = "mm1" },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 48.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 51.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 48.0 } },
+  { wait_ms = 2000 },
+  { set_sensor = { sensor = "deflasher.temperature", value = 45.0 } },
+  { wait_ms = 4000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 12000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  # A part held too long: picked at the deflasher, placed at the stocker about 25 s later.
+  { perform = { mm = "mm1", action = "pick" } },
+  { move_to = { mm = "mm1", point = [10.0, 7.0] } },
+  { wait_idle = "mm1" },
+  { wait_ms = 15000 },
+  { move_to = { mm = "mm1", machine = "stocker" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  # The stocker fills up: full, then over-full.
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm1", machine = "encaser" } },
+  { wait_idle = "mm1" },
+]
+
+[[scenes.shift.tracks]]
+name = "mm2"
+steps = [
+  # A part from the stocker to packing after mm1's first delivery.
+  { wait_ms = 15000 },
+  { move_to = { mm = "mm2", machine = "stocker" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm2", machine = "packing" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "place" } },
+  # After mm1 has over-filled the stocker: empty it, and pick once more.
+  { wait_ms = 52000 },
+  { move_to = { mm = "mm2", machine = "stocker" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 500 },
+  { move_to = { mm = "mm2", machine = "packing" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "place" } },
+]
+
+[[scenes.shift.tracks]]
+name = "sensors"
+steps = [
+  { wait_ms = 5000 },      # 5 s: a noisy period of 30 s
+  { set_sensor = { sensor = "noise_level", value = 92.0 } },
+  { wait_ms = 30000 },     # 35 s
+  { set_sensor = { sensor = "noise_level", value = 78.0 } },
+  { wait_ms = 15000 },     # 50 s: a door opens
+  { set_sensor = { sensor = "hall_temperature", value = 22.5 } },
+  { wait_ms = 10000 },     # 60 s
+  { set_sensor = { sensor = "hall_temperature", value = 21.0 } },
+  { wait_ms = 5000 },      # 65 s: mm2's vibration 1 rises
+  { set_sensor = { sensor = "mm2.vibration_1", value = 0.14 } },
+  { wait_ms = 5000 },      # 70 s
+  { set_sensor = { sensor = "mm2.vibration_1", value = 0.10 } },
+  { wait_ms = 50000 },     # 120 s: end of the shift
+]
+
+# --- Output -----------------------------------------------------------------------------------
+
+[output]
+position_interval_ms = 100
+
+# Publish every event to MQTT topics by what it carries (see "Streaming over MQTT" in the README). An event goes to
+# every topic it matches: a sensor reading of mm1 goes to factory/sensors/vibration, factory/mm/mm1 and factory/all.
+[output.sinks.mqtt]
+type = "mqtt"
+broker = "127.0.0.1:1883"
+
+# Readings by sensor type.
+[[output.sinks.mqtt.topics]]
+topic = "factory/sensors/temperature"
+kinds = ["sensor"]
+entities = ["deflasher", "hall_temperature"]
+
+[[output.sinks.mqtt.topics]]
+topic = "factory/sensors/vibration"
+kinds = ["sensor"]
+entities = ["mm1", "mm2"]
+
+[[output.sinks.mqtt.topics]]
+topic = "factory/sensors/noise"
+kinds = ["sensor"]
+entities = ["noise_level"]
+
+# Everything about each MM: its moves, positions, actions and sensors.
+[[output.sinks.mqtt.topics]]
+topic = "factory/mm/mm1"
+entities = ["mm1"]
+
+[[output.sinks.mqtt.topics]]
+topic = "factory/mm/mm2"
+entities = ["mm2"]
+
+# Picks and places, and positions, of every MM.
+[[output.sinks.mqtt.topics]]
+topic = "factory/actions"
+kinds = ["action"]
+
+[[output.sinks.mqtt.topics]]
+topic = "factory/positions"
+kinds = ["position"]
+
+# Every event.
+[[output.sinks.mqtt.topics]]
+topic = "factory/all"

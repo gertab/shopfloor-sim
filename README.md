@@ -186,6 +186,7 @@ scenarios use the same file format and the same simulator:
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | TCP |
+| [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size. Machines and MMs are drawn at their real size, and text and markers scale with the floor so
 they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
@@ -398,6 +399,20 @@ Every event is **one flat JSON object** with the same envelope:
 {"v":1,"seq":42,"ts":1761730004300,"sim_ms":4300,"kind":"position","entity":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
 {"v":1,"seq":43,"ts":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","entity":"mm1","sensor_kind":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
 {"v":1,"seq":88,"ts":1761730012300,"sim_ms":12300,"kind":"action","entity":"mm1","action":"pick","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
+```
+
+For a longer sample, [scenarios/sample-floor-events.jsonl](scenarios/sample-floor-events.jsonl) has the first 12.5 s
+(318 events) of the sample floor's `vibration_fault` scene:
+- the simulation and the scene start;
+- mm1 drives to machine2, arrives and picks, then heads to machine3;
+- at 11.9 s its vibration is set to 1.5 g (`sensor_set`), and the next readings show it;
+- position reports and readings from every sensor run alongside throughout.
+
+It was made with:
+
+```bash
+cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene vibration_fault --fast --duration 12.5 \
+    --jsonl scenarios/sample-floor-events.jsonl
 ```
 
 The exact strings are pinned in [core/src/event.rs](core/src/event.rs).
