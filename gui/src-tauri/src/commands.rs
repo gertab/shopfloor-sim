@@ -1,9 +1,13 @@
 //! Tauri commands. Thin: everything goes through [`SimRuntime`], or [`ReplayRuntime`] while a
 //! trace is replayed.
+//!
+//! The loaded scenario's sinks ([`Outputs`]) outlive both: switching between simulating and
+//! replaying keeps them open, so a consumer connected over TCP stays connected. Loading a scenario
+//! (Open, Reload) opens fresh ones, since its outputs may differ.
 
 use crate::bridge::Bridge;
 use shopfloor_core::replay::{Format, READ_ONLY, Replay, ReplayOptions};
-use shopfloor_core::runtime::{ReplayRuntime, now_ms};
+use shopfloor_core::runtime::{Outputs, ReplayRuntime, now_ms};
 use shopfloor_core::{
     CommandEnvelope, Control, Origin, Scenario, SimCommand, SimRuntime, WorldState,
 };
@@ -23,6 +27,7 @@ pub(crate) struct SimHost {
 struct Running {
     runtime: Runtime,
     bridge: Bridge,
+    outputs: Outputs,
 }
 
 /// The loaded scenario either simulates or replays traces on its layout.
@@ -32,15 +37,11 @@ enum Runtime {
 }
 
 impl Runtime {
-    /// Starts it, and the bridge to the webview.
-    fn start(self, app: AppHandle) -> Running {
-        let bridge = match &self {
+    /// The bridge forwarding it to the webview.
+    fn bridge(&self, app: AppHandle) -> Bridge {
+        match self {
             Runtime::Sim(runtime) => Bridge::start(app, runtime.watch_state(), runtime.subscribe()),
             Runtime::Replay(runtime) => Bridge::start(app, runtime.watch_state(), runtime.subscribe()),
-        };
-        Running {
-            runtime: self,
-            bridge,
         }
     }
 
@@ -55,13 +56,6 @@ impl Runtime {
         match self {
             Runtime::Sim(runtime) => runtime.state(),
             Runtime::Replay(runtime) => runtime.state(),
-        }
-    }
-
-    fn sink_status(&self) -> BTreeMap<String, String> {
-        match self {
-            Runtime::Sim(runtime) => runtime.sink_status(),
-            Runtime::Replay(runtime) => runtime.sink_status(),
         }
     }
 
@@ -89,9 +83,27 @@ impl Runtime {
 }
 
 impl Running {
-    async fn stop(self) {
+    fn new(app: AppHandle, runtime: Runtime, outputs: Outputs) -> Self {
+        let bridge = runtime.bridge(app);
+        Self {
+            runtime,
+            bridge,
+            outputs,
+        }
+    }
+
+    /// Stops the runtime and its bridge, keeping the outputs open for the next runtime.
+    async fn stop_runtime(self) -> (Arc<Scenario>, Outputs) {
+        let scenario = Arc::clone(self.runtime.scenario());
         self.bridge.stop();
         self.runtime.shutdown().await;
+        (scenario, self.outputs)
+    }
+
+    /// Stops everything, outputs included.
+    async fn stop(self) {
+        let (_, outputs) = self.stop_runtime().await;
+        outputs.close().await;
     }
 }
 
@@ -140,9 +152,11 @@ pub(crate) async fn load_scenario(
     if let Some(previous) = running.take() {
         previous.stop().await;
     }
-    let runtime = SimRuntime::spawn(Arc::clone(&scenario)).map_err(|e| format!("{e:#}"))?;
+    // Only now: the new outputs may need the ports the previous ones held.
+    let outputs = Outputs::open(&scenario).map_err(|e| format!("{e:#}"))?;
+    let runtime = Runtime::Sim(SimRuntime::spawn_with(Arc::clone(&scenario), outputs.writer()));
     tracing::info!("loaded scenario '{}' from {}", scenario.name, path.display());
-    *running = Some(Runtime::Sim(runtime).start(app));
+    *running = Some(Running::new(app, runtime, outputs));
     Ok((*scenario).clone())
 }
 
@@ -164,13 +178,11 @@ pub(crate) async fn start_replay(
         positions,
     };
     let (replay, warnings) = build_replay(&scenario, &paths, options).map_err(|e| format!("{e:#}"))?;
-    // Only now: the replay's sinks need the ports the simulation held.
-    if let Some(previous) = running.take() {
-        previous.stop().await;
-    }
-    let runtime = ReplayRuntime::spawn(replay).map_err(|e| format!("{e:#}"))?;
+    let previous = running.take().ok_or("No scenario loaded")?;
+    let (_, outputs) = previous.stop_runtime().await;
+    let runtime = Runtime::Replay(ReplayRuntime::spawn_with(replay, outputs.writer()));
     tracing::info!("replaying {} trace(s) on '{}'", paths.len(), scenario.name);
-    *running = Some(Runtime::Replay(runtime).start(app));
+    *running = Some(Running::new(app, runtime, outputs));
     Ok(warnings)
 }
 
@@ -185,10 +197,9 @@ pub(crate) async fn stop_replay(app: AppHandle, host: State<'_, SimHost>) -> Res
         *running = Some(current);
         return Ok(());
     }
-    let scenario = Arc::clone(current.runtime.scenario());
-    current.stop().await;
-    let runtime = SimRuntime::spawn(scenario).map_err(|e| format!("{e:#}"))?;
-    *running = Some(Runtime::Sim(runtime).start(app));
+    let (scenario, outputs) = current.stop_runtime().await;
+    let runtime = Runtime::Sim(SimRuntime::spawn_with(scenario, outputs.writer()));
+    *running = Some(Running::new(app, runtime, outputs));
     Ok(())
 }
 
@@ -214,7 +225,7 @@ pub(crate) async fn get_sink_status(
     let running = host.running.lock().await;
     Ok(running
         .as_ref()
-        .map(|running| running.runtime.sink_status())
+        .map(|running| running.outputs.status())
         .unwrap_or_default())
 }
 

@@ -290,20 +290,6 @@ export interface LogEntry {
   data: Record<string, unknown>;
 }
 
-export const EVENT_KINDS: EventKind[] = [
-  "position",
-  "move_command",
-  "arrived",
-  "stopped",
-  "undock",
-  "dock",
-  "sensor",
-  "sensor_set",
-  "action",
-  "scene",
-  "sim",
-];
-
 // --- Commands (command.rs) ---------------------------------------------------------------------
 
 export type Target = { point: Vec2 } | { machine: string };

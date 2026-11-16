@@ -1,8 +1,27 @@
 import { Braces, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { KIND_LABELS, describeEntry, formatSimTime } from "../../format";
-import { EVENT_KINDS } from "../../types";
+import { KIND_GROUP, KIND_LABELS, LOG_GROUPS, describeEntry, formatSimTime, rowLabel } from "../../format";
+import type { LogGroup } from "../../format";
 import type { EventKind, LogEntry, Scenario } from "../../types";
+
+/** The kinds in each log group, in the order they're listed in a chip's tooltip. */
+const GROUP_KINDS = Object.fromEntries(
+  LOG_GROUPS.map((group) => [
+    group,
+    (Object.keys(KIND_GROUP) as EventKind[]).filter((kind) => KIND_GROUP[kind] === group),
+  ]),
+) as Record<LogGroup, EventKind[]>;
+
+const GROUP_TITLES: Record<LogGroup, string> = {
+  position: "positions",
+  sensor: "sensor readings",
+  event: "events",
+  sim: "simulation events",
+};
+
+function groupContents(group: LogGroup): string {
+  return GROUP_KINDS[group].map((kind) => (kind === "action" ? "actions" : KIND_LABELS[kind])).join(", ");
+}
 
 /** Rows rendered at most (the hook keeps more for filtering). */
 const MAX_ROWS = 500;
@@ -18,7 +37,7 @@ interface EventLogProps {
 
 /** Live view of the output stream: exactly what sinks (and their consumers) receive. */
 export function EventLog({ scenario, events, counts, collapsed, onToggleCollapsed, onClear }: EventLogProps) {
-  const [hiddenKinds, setHiddenKinds] = useState<Set<EventKind>>(new Set());
+  const [hiddenGroups, setHiddenGroups] = useState<Set<LogGroup>>(new Set());
   const [entity, setEntity] = useState<string>("all");
   const [raw, setRaw] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -38,10 +57,10 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
   const rows = useMemo(() => {
     const filtered = events.filter(
       (event) =>
-        !(event.kind && hiddenKinds.has(event.kind)) && (entity === "all" || event.device_id === entity),
+        !(event.kind && hiddenGroups.has(KIND_GROUP[event.kind])) && (entity === "all" || event.device_id === entity),
     );
     return filtered.slice(-MAX_ROWS);
-  }, [events, hiddenKinds, entity]);
+  }, [events, hiddenGroups, entity]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -50,11 +69,11 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
     }
   }, [rows]);
 
-  const toggleKind = (kind: EventKind) =>
-    setHiddenKinds((previous) => {
+  const toggleGroup = (group: LogGroup) =>
+    setHiddenGroups((previous) => {
       const next = new Set(previous);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
       return next;
     });
 
@@ -68,15 +87,18 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
         {!collapsed && (
           <>
             <div className="kind-chips">
-              {EVENT_KINDS.map((kind) => (
+              {LOG_GROUPS.map((group) => (
                 <button
-                  key={kind}
+                  key={group}
                   type="button"
-                  className={`kind-chip kind-${kind}${hiddenKinds.has(kind) ? " is-off" : ""}`}
-                  onClick={() => toggleKind(kind)}
-                  title={hiddenKinds.has(kind) ? `Show ${kind} events` : `Hide ${kind} events`}
+                  className={`kind-chip group-${group}${hiddenGroups.has(group) ? " is-off" : ""}`}
+                  onClick={() => toggleGroup(group)}
+                  title={`${hiddenGroups.has(group) ? "Show" : "Hide"} ${GROUP_TITLES[group]}: ${groupContents(group)}`}
                 >
-                  {KIND_LABELS[kind]} <span className="count">{counts[kind] ?? 0}</span>
+                  {group}{" "}
+                  <span className="count">
+                    {GROUP_KINDS[group].reduce((total, kind) => total + (counts[kind] ?? 0), 0)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -120,8 +142,8 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
             ) : (
               <div key={event.seq} className="event-row" title={JSON.stringify(event.data)}>
                 <span className="event-time">{formatSimTime(event.sim_ms)}</span>
-                <span className={`event-kind kind-${event.kind ?? "other"}`}>
-                  {event.kind ? KIND_LABELS[event.kind] : "other"}
+                <span className={`event-kind group-${event.kind ? KIND_GROUP[event.kind] : "other"}`}>
+                  {rowLabel(event)}
                 </span>
                 <span className="event-entity">{event.device_id ?? ""}</span>
                 <span className="event-text">{describeEntry(event, scenario)}</span>

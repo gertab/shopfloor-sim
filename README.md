@@ -80,7 +80,7 @@ cd gui && npm run build     # TypeScript type-check + production bundle
 | Perform an action | Use the action buttons (Pick, Place, ...) on the MM's card. A greyed-out button shows why on hover (e.g. "'pick' needs mm1 at a machine"). The action name flashes above the MM, and the card shows the last action. |
 | Change a sensor | Use the slider or number field in **Sensors** on the right. The reset button beside it restores the default. The pause button stops its readings, as if the sensor had failed, until you resume it. **noise σ** adds Gaussian noise. Clicking a reading or a free-standing sensor's diamond on the floor jumps to its control. Free-standing sensors are listed under **Floor**. |
 | Pause / reset | Toolbar, or **Space** to pause and resume. Reset returns to start positions, default sensor values and time 0. |
-| Inspect the output | The bottom panel shows every event. You can filter by kind or entity. **{}** shows the raw JSON lines that the sinks write. |
+| Inspect the output | The bottom panel shows every event. Filter by entity, or by group: **position**, **sensor** (readings), **event** (moves, docking, arrivals, stops and actions) and **sim** (the simulation, scenes and sensor changes). The groups only apply to the panel; the events keep their kinds. **{}** shows the raw JSON lines that the sinks write. |
 | Play a scene | **Scenes** at the top right: **Play** / **Stop**. While it plays, each track shows what it waits on, and the toolbar shows the scene and its iteration. Pause and Reset apply to the scene too, and manual control still works. |
 | Switch scenario | **Open** (the picker starts in `scenarios/`). **Reload** re-reads the current file. |
 
@@ -530,6 +530,9 @@ In the app, the **Replay** section at the top of the right-hand panel:
     the replay finished, and keeps its traces and options for another run.
   - The toolbar's Pause and Reset act on the replay.
 - The log shows exactly what the outputs send.
+- Switching between simulating and replaying keeps the outputs open: starting, stopping, or the return when a replay
+  finishes. A TCP client such as Liminal stays connected, and so does the MQTT connection. Open and Reload restart them,
+  since another file's outputs may differ.
 
 Checks:
 - **Errors stop a replay.** These are Liminal Desk's own rules:
@@ -586,6 +589,12 @@ cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production
 # terminal 2, in the Liminal repo on its shopfloor branch (or open the config in the Liminal GUI and press Run)
 cargo run -- --config config/examples/config_shopfloor_vibr_tcp.toml
 ```
+
+For the die-processing cell, [scenarios/die-processing/liminal-print.toml](scenarios/die-processing/liminal-print.toml)
+is a Liminal config that lives next to the scenario. It receives everything the cell sends, over TCP (port 9000) and
+over MQTT (`die-cell/sensors` and `die-cell/events`, which share every message between them), and prints each message
+under the channel it came by. Run it from the Liminal repo with
+`cargo run -- --config <path to it>` while the scenario replays.
 
 Writing your own pipeline:
 - `tcp_input` makes each whole frame the message payload and keeps no topic, so route on the event's fields, for

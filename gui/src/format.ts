@@ -14,6 +14,32 @@ export const KIND_LABELS: Record<EventKind, string> = {
   sim: "sim",
 };
 
+/** The event log's filters. They only group the kinds in the log; the events themselves keep their kinds. */
+export type LogGroup = "position" | "sensor" | "event" | "sim";
+
+export const LOG_GROUPS: LogGroup[] = ["position", "sensor", "event", "sim"];
+
+export const KIND_GROUP: Record<EventKind, LogGroup> = {
+  position: "position",
+  sensor: "sensor",
+  move_command: "event",
+  undock: "event",
+  dock: "event",
+  arrived: "event",
+  stopped: "event",
+  action: "event",
+  sim: "sim",
+  scene: "sim",
+  sensor_set: "sim",
+};
+
+/** The badge of a log row: an action's own name ("pick"), otherwise the kind ("move", "dock", "sensor set"). */
+export function rowLabel(entry: LogEntry): string {
+  if (!entry.kind) return "other";
+  if (entry.kind === "action") return str(entry.data, "event") ?? KIND_LABELS.action;
+  return KIND_LABELS[entry.kind];
+}
+
 /** Accent colour per mobile manipulator (by index in the scenario). */
 const MM_COLORS = ["#53c7b6", "#f2b84b", "#6aa9ff", "#ff8fc7", "#b48cff", "#9ad86b"];
 

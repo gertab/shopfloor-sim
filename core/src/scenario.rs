@@ -1218,9 +1218,13 @@ entities = [\"mm1\"]
         fn load_all(dir: &Path, count: &mut usize) {
             for entry in std::fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
+                // Liminal configs that go with a scenario (`liminal*.toml`) aren't scenarios.
+                let liminal = path
+                    .file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("liminal"));
                 if path.is_dir() {
                     load_all(&path, count);
-                } else if path.extension().is_some_and(|ext| ext == "toml") {
+                } else if path.extension().is_some_and(|ext| ext == "toml") && !liminal {
                     load_scenario(&path).unwrap_or_else(|error| panic!("{}: {error:#}", path.display()));
                     *count += 1;
                 }

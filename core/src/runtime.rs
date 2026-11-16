@@ -2,15 +2,20 @@
 //! tokio.
 //!
 //! One task owns the engine (or replay) and `select!`s over incoming requests and a fixed-rate
-//! tick. Its output goes out in batches on a broadcast channel (sinks, the UI bridge), and the
-//! latest [`WorldState`] is published on a watch channel.
+//! tick. Its output goes out in batches on a broadcast channel (the UI bridge, the CLI), and to the
+//! scenario's sinks through an [`OutputWriter`]. The latest [`WorldState`] is published on a watch
+//! channel.
+//!
+//! The sinks belong to an [`Outputs`]. A runtime started with `spawn` opens its own; the app opens
+//! one per loaded scenario and hands it to each runtime (`spawn_with`), so switching between
+//! simulating and replaying keeps them open and their consumers connected.
 
 use crate::command::{CommandEnvelope, Control};
 use crate::engine::{Engine, WorldState};
 use crate::event::SimEvent;
 use crate::replay::Replay;
 use crate::scenario::Scenario;
-use crate::sinks::{Message, SinkMonitor, SinkThread, ToMessage, build_sink, spawn_sink};
+use crate::sinks::{Message, SinkMonitor, SinkThread, build_sink, spawn_sink};
 use std::collections::BTreeMap;
 use anyhow::anyhow;
 use std::sync::Arc;
@@ -21,11 +26,93 @@ use tokio::time::MissedTickBehavior;
 
 /// A group of events produced by one command or one tick.
 pub type EventBatch = Arc<[SimEvent]>;
-/// A group of replayed messages produced by one tick.
+/// A group of messages for the sinks (or replayed messages) produced by one tick.
 pub type MessageBatch = Arc<[Message]>;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 const REQUEST_CHANNEL_CAPACITY: usize = 64;
+/// How long a runtime's task gets to stop before it is aborted.
+const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The scenario's sinks, each on its own thread, all fed through one channel.
+pub struct Outputs {
+    writer: OutputWriter,
+    sinks: Vec<SinkThread>,
+}
+
+/// Where a runtime writes its output: the sinks of an [`Outputs`].
+#[derive(Clone)]
+pub struct OutputWriter {
+    sender: broadcast::Sender<MessageBatch>,
+    monitor: SinkMonitor,
+}
+
+impl Outputs {
+    /// Opens the scenario's sinks. Must be called inside a tokio runtime.
+    pub fn open(scenario: &Scenario) -> anyhow::Result<Self> {
+        let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let monitor = SinkMonitor::default();
+        let mut sinks = Vec::new();
+        for def in &scenario.output.sinks {
+            let sink = build_sink(def, &monitor)?;
+            sinks.push(spawn_sink(def.name.clone(), sink, sender.subscribe()));
+        }
+        Ok(Self {
+            writer: OutputWriter { sender, monitor },
+            sinks,
+        })
+    }
+
+    pub fn writer(&self) -> OutputWriter {
+        self.writer.clone()
+    }
+
+    /// Live status of sinks that report one (TCP: address and connected clients), by sink name.
+    pub fn status(&self) -> BTreeMap<String, String> {
+        self.writer.status()
+    }
+
+    /// Lets every sink drain and close. Call it once the runtimes writing here have shut down:
+    /// sinks run until every writer is gone.
+    pub async fn close(self) {
+        let Self { writer, sinks } = self;
+        drop(writer);
+        let _ = tokio::task::spawn_blocking(move || {
+            for sink in sinks {
+                if sink.join.join().is_err() {
+                    tracing::error!("sink '{}' panicked", sink.name);
+                }
+            }
+        })
+        .await;
+    }
+}
+
+impl OutputWriter {
+    pub fn status(&self) -> BTreeMap<String, String> {
+        self.monitor.snapshot()
+    }
+
+    /// Whether any sink is listening, i.e. whether a batch is worth preparing.
+    fn wanted(&self) -> bool {
+        self.sender.receiver_count() > 0
+    }
+
+    fn write(&self, batch: MessageBatch) {
+        if !batch.is_empty() {
+            // An error only means no sink is listening.
+            let _ = self.sender.send(batch);
+        }
+    }
+}
+
+/// Waits for a runtime's task to stop, aborting it if it takes too long.
+async fn stop_task(mut task: JoinHandle<()>, what: &str) {
+    if tokio::time::timeout(STOP_TIMEOUT, &mut task).await.is_err() {
+        tracing::warn!("{what} task did not stop within {} s", STOP_TIMEOUT.as_secs());
+        task.abort();
+    }
+}
 
 enum Request {
     Command(CommandEnvelope, oneshot::Sender<anyhow::Result<()>>),
@@ -39,36 +126,48 @@ pub struct SimRuntime {
     events: broadcast::Sender<EventBatch>,
     state: watch::Receiver<WorldState>,
     engine_task: JoinHandle<()>,
-    sinks: Vec<SinkThread>,
-    monitor: SinkMonitor,
+    writer: OutputWriter,
+    /// Outputs this runtime opened itself (`spawn`), closed when it shuts down.
+    owned_outputs: Option<Outputs>,
 }
 
 impl SimRuntime {
     /// Opens the scenario's sinks and starts the engine. Must be called inside a tokio runtime.
     pub fn spawn(scenario: Arc<Scenario>) -> anyhow::Result<Self> {
+        // The sinks are open before the engine starts, so they see the opening `sim started`.
+        let outputs = Outputs::open(&scenario)?;
+        let mut runtime = Self::spawn_with(scenario, outputs.writer());
+        runtime.owned_outputs = Some(outputs);
+        Ok(runtime)
+    }
+
+    /// Starts the engine, writing to sinks that are already open (and stay open after it).
+    pub fn spawn_with(scenario: Arc<Scenario>, writer: OutputWriter) -> Self {
         let engine = Engine::new(Arc::clone(&scenario));
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (state_tx, state) = watch::channel(engine.state());
         let (requests, request_rx) = mpsc::channel(REQUEST_CHANNEL_CAPACITY);
-
-        // Sinks subscribe before the engine starts so they see the opening `sim started` event.
-        let (sinks, monitor) = spawn_sinks(&scenario, &events)?;
-
-        let engine_task = tokio::spawn(run_engine(engine, request_rx, events.clone(), state_tx));
-        Ok(Self {
+        let engine_task = tokio::spawn(run_engine(
+            engine,
+            request_rx,
+            events.clone(),
+            writer.clone(),
+            state_tx,
+        ));
+        Self {
             scenario,
             requests,
             events,
             state,
             engine_task,
-            sinks,
-            monitor,
-        })
+            writer,
+            owned_outputs: None,
+        }
     }
 
     /// Live status of sinks that report one (TCP: address and connected clients), by sink name.
     pub fn sink_status(&self) -> BTreeMap<String, String> {
-        self.monitor.snapshot()
+        self.writer.status()
     }
 
     pub fn scenario(&self) -> &Arc<Scenario> {
@@ -111,51 +210,23 @@ impl SimRuntime {
             .map_err(|_| anyhow!("Simulation stopped before answering"))?
     }
 
-    /// Stops the engine, then lets every sink drain and close.
+    /// Stops the engine. Sinks it opened itself then drain and close; shared ones stay open.
     pub async fn shutdown(self) {
         let Self {
             requests,
-            events,
             engine_task,
-            sinks,
+            writer,
+            owned_outputs,
             ..
         } = self;
         let _ = requests.send(Request::Shutdown).await;
-        if tokio::time::timeout(Duration::from_secs(2), engine_task)
-            .await
-            .is_err()
-        {
-            tracing::warn!("engine task did not stop within 2 s");
+        stop_task(engine_task, "engine").await;
+        // Sinks run until every writer is gone, this one included.
+        drop(writer);
+        if let Some(outputs) = owned_outputs {
+            outputs.close().await;
         }
-        // Dropping the last sender closes the channel; sinks finish what's queued and exit.
-        drop(events);
-        join_sinks(sinks).await;
     }
-}
-
-/// Opens the scenario's sinks, each on its own thread reading `events`.
-fn spawn_sinks<T: ToMessage + Send + Sync + 'static>(
-    scenario: &Scenario,
-    events: &broadcast::Sender<Arc<[T]>>,
-) -> anyhow::Result<(Vec<SinkThread>, SinkMonitor)> {
-    let monitor = SinkMonitor::default();
-    let mut sinks = Vec::new();
-    for def in &scenario.output.sinks {
-        let sink = build_sink(def, &monitor)?;
-        sinks.push(spawn_sink(def.name.clone(), sink, events.subscribe()));
-    }
-    Ok((sinks, monitor))
-}
-
-async fn join_sinks(sinks: Vec<SinkThread>) {
-    let _ = tokio::task::spawn_blocking(move || {
-        for sink in sinks {
-            if sink.join.join().is_err() {
-                tracing::error!("sink '{}' panicked", sink.name);
-            }
-        }
-    })
-    .await;
 }
 
 enum ReplayRequest {
@@ -171,32 +242,46 @@ pub struct ReplayRuntime {
     events: broadcast::Sender<MessageBatch>,
     state: watch::Receiver<WorldState>,
     task: JoinHandle<()>,
-    sinks: Vec<SinkThread>,
-    monitor: SinkMonitor,
+    writer: OutputWriter,
+    /// Outputs this runtime opened itself (`spawn`), closed when it shuts down.
+    owned_outputs: Option<Outputs>,
 }
 
 impl ReplayRuntime {
     /// Opens the scenario's sinks and starts playing. Must be called inside a tokio runtime.
     pub fn spawn(replay: Replay) -> anyhow::Result<Self> {
+        let outputs = Outputs::open(replay.scenario())?;
+        let mut runtime = Self::spawn_with(replay, outputs.writer());
+        runtime.owned_outputs = Some(outputs);
+        Ok(runtime)
+    }
+
+    /// Starts playing, writing to sinks that are already open (and stay open after it).
+    pub fn spawn_with(replay: Replay, writer: OutputWriter) -> Self {
         let scenario = Arc::clone(replay.scenario());
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (state_tx, state) = watch::channel(replay.state());
         let (requests, request_rx) = mpsc::channel(REQUEST_CHANNEL_CAPACITY);
-        let (sinks, monitor) = spawn_sinks(&scenario, &events)?;
-        let task = tokio::spawn(run_replay(replay, request_rx, events.clone(), state_tx));
-        Ok(Self {
+        let task = tokio::spawn(run_replay(
+            replay,
+            request_rx,
+            events.clone(),
+            writer.clone(),
+            state_tx,
+        ));
+        Self {
             scenario,
             requests,
             events,
             state,
             task,
-            sinks,
-            monitor,
-        })
+            writer,
+            owned_outputs: None,
+        }
     }
 
     pub fn sink_status(&self) -> BTreeMap<String, String> {
-        self.monitor.snapshot()
+        self.writer.status()
     }
 
     pub fn scenario(&self) -> &Arc<Scenario> {
@@ -227,21 +312,22 @@ impl ReplayRuntime {
             .map_err(|_| anyhow!("The replay stopped before answering"))?
     }
 
-    /// Stops playing, then lets every sink drain and close.
+    /// Stops playing. Sinks it opened itself then drain and close; shared ones stay open.
     pub async fn shutdown(self) {
         let Self {
             requests,
-            events,
             task,
-            sinks,
+            writer,
+            owned_outputs,
             ..
         } = self;
         let _ = requests.send(ReplayRequest::Shutdown).await;
-        if tokio::time::timeout(Duration::from_secs(2), task).await.is_err() {
-            tracing::warn!("replay task did not stop within 2 s");
+        stop_task(task, "replay").await;
+        // Sinks run until every writer is gone, this one included.
+        drop(writer);
+        if let Some(outputs) = owned_outputs {
+            outputs.close().await;
         }
-        drop(events);
-        join_sinks(sinks).await;
     }
 }
 
@@ -249,6 +335,7 @@ async fn run_replay(
     mut replay: Replay,
     mut requests: mpsc::Receiver<ReplayRequest>,
     events: broadcast::Sender<MessageBatch>,
+    outputs: OutputWriter,
     state: watch::Sender<WorldState>,
 ) {
     let tick = Duration::from_millis(replay.scenario().sim.tick_ms);
@@ -256,17 +343,19 @@ async fn run_replay(
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     interval.tick().await;
 
-    publish(&events, replay.start());
+    publish_messages(&events, &outputs, replay.start());
     loop {
         tokio::select! {
             request = requests.recv() => match request {
                 Some(ReplayRequest::Control(control, reply)) => {
-                    let result = replay.control(control, now_ms()).map(|batch| publish(&events, batch));
+                    let result = replay
+                        .control(control, now_ms())
+                        .map(|batch| publish_messages(&events, &outputs, batch));
                     let _ = reply.send(result);
                 }
                 Some(ReplayRequest::Shutdown) | None => break,
             },
-            _ = interval.tick() => publish(&events, replay.step()),
+            _ = interval.tick() => publish_messages(&events, &outputs, replay.step()),
         }
         let latest = replay.state();
         state.send_if_modified(|current| {
@@ -284,6 +373,7 @@ async fn run_engine(
     mut engine: Engine,
     mut requests: mpsc::Receiver<Request>,
     events: broadcast::Sender<EventBatch>,
+    outputs: OutputWriter,
     state: watch::Sender<WorldState>,
 ) {
     let tick = Duration::from_millis(engine.scenario().sim.tick_ms);
@@ -292,11 +382,11 @@ async fn run_engine(
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     interval.tick().await; // the first tick completes immediately
 
-    publish(&events, engine.start(now_ms()));
+    publish_events(&events, &outputs, engine.start(now_ms()));
     // A scenario can open paused: `sim started`, then `sim paused`, and the clock waits at 0.
     if engine.scenario().sim.start_paused {
         let batch = engine.control(Control::Pause, now_ms()).expect("pausing never fails");
-        publish(&events, batch);
+        publish_events(&events, &outputs, batch);
         state.send_replace(engine.state());
     }
     loop {
@@ -305,18 +395,18 @@ async fn run_engine(
                 Some(Request::Command(envelope, reply)) => {
                     let result = engine
                         .apply(envelope, now_ms())
-                        .map(|batch| publish(&events, batch));
+                        .map(|batch| publish_events(&events, &outputs, batch));
                     let _ = reply.send(result);
                 }
                 Some(Request::Control(control, reply)) => {
                     let result = engine
                         .control(control, now_ms())
-                        .map(|batch| publish(&events, batch));
+                        .map(|batch| publish_events(&events, &outputs, batch));
                     let _ = reply.send(result);
                 }
                 Some(Request::Shutdown) | None => break,
             },
-            _ = interval.tick() => publish(&events, engine.step(now_ms())),
+            _ = interval.tick() => publish_events(&events, &outputs, engine.step(now_ms())),
         }
         let latest = engine.state();
         state.send_if_modified(|current| {
@@ -330,11 +420,27 @@ async fn run_engine(
     }
 }
 
-fn publish<T>(events: &broadcast::Sender<Arc<[T]>>, batch: Vec<T>) {
-    if !batch.is_empty() {
-        // An error only means nobody is subscribed right now.
-        let _ = events.send(batch.into());
+/// Sends a batch of events to the runtime's subscribers (UI bridge, CLI) and, as messages, to the
+/// sinks (serialised only if a sink is listening).
+fn publish_events(events: &broadcast::Sender<EventBatch>, outputs: &OutputWriter, batch: Vec<SimEvent>) {
+    if batch.is_empty() {
+        return;
     }
+    if outputs.wanted() {
+        outputs.write(batch.iter().map(Message::from_event).collect());
+    }
+    // An error only means nobody is subscribed right now.
+    let _ = events.send(batch.into());
+}
+
+/// Sends a batch of replayed messages to the runtime's subscribers and to the sinks.
+fn publish_messages(events: &broadcast::Sender<MessageBatch>, outputs: &OutputWriter, batch: Vec<Message>) {
+    if batch.is_empty() {
+        return;
+    }
+    let batch: MessageBatch = batch.into();
+    outputs.write(Arc::clone(&batch));
+    let _ = events.send(batch);
 }
 
 pub fn now_ms() -> u64 {
@@ -514,6 +620,89 @@ mod tests {
             })
             .collect();
         assert_eq!(lifecycle, ["Started", "Paused", "Resumed"]);
+    }
+
+    /// One length-prefixed frame from a TCP sink, as text.
+    fn read_frame(stream: &mut std::net::TcpStream) -> String {
+        use std::io::Read;
+        let mut length = [0u8; 4];
+        stream.read_exact(&mut length).unwrap();
+        let mut json = vec![0u8; u32::from_be_bytes(length) as usize];
+        stream.read_exact(&mut json).unwrap();
+        String::from_utf8(json).unwrap()
+    }
+
+    /// Shared outputs outlive the runtimes writing to them: a TCP client stays connected while a
+    /// simulation is replaced by a replay, as when the app switches between them.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn shared_outputs_stay_open_across_runtimes() {
+        use crate::replay::{Replay, ReplayOptions};
+        use crate::trace::parse_trace;
+        use std::io::Read;
+
+        let scenario = Arc::new(
+            parse_scenario(
+                r#"
+                name = "Outputs test"
+
+                [floor]
+                width_m = 10.0
+                height_m = 5.0
+
+                [mobile_manipulators.mm1]
+                start = [2.0, 3.0]
+
+                [output.sinks.tcp]
+                type = "tcp"
+                bind = "127.0.0.1:0"
+                "#,
+                None,
+            )
+            .unwrap(),
+        );
+        let outputs = Outputs::open(&scenario).unwrap();
+        let connected = |clients: usize| {
+            outputs.status()["tcp"].ends_with(&format!("· {clients} connected"))
+        };
+        // "listening on 127.0.0.1:PORT · 0 connected"
+        let address = outputs.status()["tcp"]
+            .trim_start_matches("listening on ")
+            .split(' ')
+            .next()
+            .unwrap()
+            .to_string();
+        let mut client = std::net::TcpStream::connect(&address).unwrap();
+        client.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        for _ in 0..200 {
+            if connected(1) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(connected(1));
+
+        // A simulation (an idle MM and no sensors: it only says it started), then shut down.
+        let simulation = SimRuntime::spawn_with(Arc::clone(&scenario), outputs.writer());
+        let started = read_frame(&mut client);
+        assert!(started.contains(r#""kind":"sim""#) && started.contains(r#""state":"started""#), "{started}");
+        simulation.shutdown().await;
+        assert!(connected(1), "the simulation's end leaves the client connected");
+
+        // Then a replay, on the same connection.
+        let trace = parse_trace(
+            "t.json",
+            r#"{"version": 1, "steps": [{"type": "send", "payload": {"device_id": "mm1", "event": "pick"}}]}"#,
+        )
+        .unwrap();
+        let (replay, _) = Replay::new(Arc::clone(&scenario), vec![trace], ReplayOptions::default(), 0).unwrap();
+        let replay = ReplayRuntime::spawn_with(replay, outputs.writer());
+        assert_eq!(read_frame(&mut client), r#"{"device_id":"mm1","event":"pick"}"#);
+        replay.shutdown().await;
+
+        // Closing the outputs ends the connection.
+        outputs.close().await;
+        let mut byte = [0u8; 1];
+        assert_eq!(client.read(&mut byte).unwrap(), 0, "connection closed");
     }
 
     #[tokio::test]

@@ -19,13 +19,7 @@
   --machine-border: #3a4d52;
 
   --kind-position: #6aa9ff;
-  --kind-move_command: #f2b84b;
-  --kind-arrived: #53c7b6;
-  --kind-stopped: #ef6b6b;
-  --kind-undock: #e8a06a;
-  --kind-dock: #7fd6a8;
   --kind-sensor: #b48cff;
-  --kind-sensor_set: #ff8fc7;
   --kind-action: #9ad86b;
   --kind-scene: #5fd4ff;
   --kind-sim: #9aa7a5;
@@ -1138,6 +1132,12 @@ h3 {
   color: var(--text-muted);
 }
 
+/* An action's name ("throttle_rack") can be wider than its column. */
+.event-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .event-entity {
   color: var(--text-muted);
   overflow: hidden;
@@ -1154,18 +1154,12 @@ h3 {
   color: var(--text-muted);
 }
 
-.kind-position { color: var(--kind-position); }
-.kind-move_command { color: var(--kind-move_command); }
-.kind-arrived { color: var(--kind-arrived); }
-.kind-stopped { color: var(--kind-stopped); }
-.kind-undock { color: var(--kind-undock); }
-.kind-dock { color: var(--kind-dock); }
-.kind-sensor { color: var(--kind-sensor); }
-.kind-sensor_set { color: var(--kind-sensor_set); }
-.kind-action { color: var(--kind-action); }
-.kind-scene { color: var(--kind-scene); }
-.kind-sim { color: var(--kind-sim); }
-.kind-other { color: var(--text-muted); }
+/* Event log groups (format.ts: KIND_GROUP). */
+.group-position { color: var(--kind-position); }
+.group-sensor { color: var(--kind-sensor); }
+.group-event { color: var(--kind-action); }
+.group-sim { color: var(--kind-sim); }
+.group-other { color: var(--text-muted); }
 
 /* --- Toast -------------------------------------------------------------------------------- */
 

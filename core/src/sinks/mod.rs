@@ -3,9 +3,9 @@
 //! Sinks write [`Message`]s: the JSON of a simulator event, or a replayed trace payload as it was
 //! written, plus the `kind` and `device_id` that MQTT topics route on.
 //!
-//! Each sink runs on its own OS thread, reading batches from the runtime's broadcast channel, so a
-//! slow disk or terminal never stalls the simulation. A sink that falls too far behind skips
-//! batches (with a warning) rather than slowing the engine down.
+//! Each sink runs on its own OS thread, reading batches from its outputs' broadcast channel (see
+//! `runtime::Outputs`), so a slow disk or terminal never stalls the simulation. A sink that falls
+//! too far behind skips batches (with a warning) rather than slowing the engine down.
 
 mod jsonl;
 mod mqtt;
@@ -50,7 +50,7 @@ impl Message {
     }
 }
 
-/// What a runtime broadcasts and its sink threads turn into [`Message`]s.
+/// What a runtime broadcasts, as the UI bridge turns it into [`Message`]s.
 pub trait ToMessage {
     fn to_message(&self) -> Message;
 }
@@ -125,10 +125,10 @@ pub(crate) struct SinkThread {
     pub join: std::thread::JoinHandle<()>,
 }
 
-pub(crate) fn spawn_sink<T: ToMessage + Send + Sync + 'static>(
+pub(crate) fn spawn_sink(
     name: String,
     mut sink: Box<dyn EventSink>,
-    mut events: broadcast::Receiver<Arc<[T]>>,
+    mut events: broadcast::Receiver<Arc<[Message]>>,
 ) -> SinkThread {
     let thread_name = name.clone();
     let join = std::thread::Builder::new()
@@ -137,8 +137,7 @@ pub(crate) fn spawn_sink<T: ToMessage + Send + Sync + 'static>(
             loop {
                 match events.blocking_recv() {
                     Ok(batch) => {
-                        let messages: Vec<Message> = batch.iter().map(ToMessage::to_message).collect();
-                        if let Err(error) = sink.write_batch(&messages) {
+                        if let Err(error) = sink.write_batch(&batch) {
                             tracing::error!("sink '{thread_name}': write failed, stopping: {error}");
                             break;
                         }
