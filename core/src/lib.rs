@@ -5,7 +5,10 @@
 //! - [`engine`]: synchronous, deterministic world state. Changes only via commands and ticks.
 //! - [`command`] / [`event`]: what goes in and what comes out. The event schema is the contract
 //!   with consumers.
-//! - [`runtime`]: drives an engine in real time on tokio and fans events out to [`sinks`].
+//! - [`trace`] / [`replay`]: Liminal Desk traces, and replaying them on a scenario's layout instead of
+//!   simulating.
+//! - [`runtime`]: drives an engine or a replay in real time on tokio and fans its output out to
+//!   [`sinks`].
 //! - [`headless`]: runs a scenario as fast as possible (recordings, test data).
 
 pub mod command;
@@ -21,8 +24,11 @@ pub mod scene;
 pub mod sinks;
 pub mod trace;
 
+#[cfg(test)]
+mod test_support;
+
 pub use command::{CommandEnvelope, Control, Origin, SimCommand, Target};
 pub use engine::{Engine, WorldState};
 pub use event::{EventBody, SimEvent};
-pub use runtime::{EventBatch, SimRuntime};
+pub use runtime::{EventBatch, ReplayRuntime, SimRuntime};
 pub use scenario::{Scenario, load_scenario, parse_scenario};

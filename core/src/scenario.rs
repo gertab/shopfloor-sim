@@ -246,7 +246,7 @@ impl MqttTopic {
 
 /// Host and port of an MQTT broker address: `host:port`, `mqtt://host:port` or just `host`
 /// (port 1883).
-pub fn parse_broker(broker: &str) -> Result<(String, u16), String> {
+pub(crate) fn parse_broker(broker: &str) -> Result<(String, u16), String> {
     let address = broker.trim();
     let address = address.strip_prefix("mqtt://").unwrap_or(address);
     let (host, port) = match address.rsplit_once(':') {
@@ -1325,15 +1325,8 @@ entities = [\"mm1\"]
 
     #[test]
     fn bundled_scenarios_are_valid() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../scenarios");
-        let mut count = 0;
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().is_some_and(|ext| ext == "toml") {
-                load_scenario(&path).unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
-                count += 1;
-            }
+        for path in crate::test_support::bundled_scenarios() {
+            load_scenario(&path).unwrap_or_else(|e| panic!("{}: {e:#}", path.display()));
         }
-        assert!(count > 0, "no scenarios found in {}", dir.display());
     }
 }

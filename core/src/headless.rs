@@ -187,13 +187,8 @@ mod tests {
     /// position to perform only fails when it is reached, so play them all.
     #[test]
     fn every_bundled_scene_plays_without_failing() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../scenarios");
         let mut played = 0;
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().is_none_or(|ext| ext != "toml") {
-                continue;
-            }
+        for path in crate::test_support::bundled_scenarios() {
             let scenario = Arc::new(load_scenario(&path).unwrap());
             for scene in &scenario.scenes {
                 let events = Arc::new(Mutex::new(Vec::new()));
@@ -223,7 +218,7 @@ mod tests {
                 played += 1;
             }
         }
-        assert!(played > 0, "no scenes found in {}", dir.display());
+        assert!(played > 0, "no scenes found in the bundled scenarios");
     }
 
     #[test]

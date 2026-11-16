@@ -104,7 +104,7 @@ fn status(addr: SocketAddr, clients: usize) -> String {
 }
 
 /// Length-prefixed frames (4-byte big-endian length + JSON) for a batch of messages.
-pub fn encode_frames(messages: &[Message]) -> Vec<u8> {
+fn encode_frames(messages: &[Message]) -> Vec<u8> {
     let mut frames = Vec::new();
     for message in messages {
         frames.extend_from_slice(&(message.json.len() as u32).to_be_bytes());

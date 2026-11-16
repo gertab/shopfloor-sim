@@ -5,12 +5,18 @@
 //!
 //! The keys follow the Liminal Desk traces where they describe the same thing (`device_id`, `event`,
 //! `type`, `target`, `object`, `source`, `destination`, `timestamp_ms`), so a rule written for a
-//! trace payload also matches the simulator's events (see `docs/EVENT_SCHEMA_V2.md`).
+//! trace payload also matches the simulator's events (see "Output events" in the README).
 
 use crate::command::Origin;
 use serde::{Deserialize, Serialize};
 
 pub const SCHEMA_VERSION: u32 = 2;
+
+/// Decimals kept in event output: positions to the millimetre, headings to ~0.0001 rad.
+pub(crate) const POSITION_DECIMALS: i32 = 3;
+pub(crate) const HEADING_DECIMALS: i32 = 4;
+/// Decimals kept in sensor values.
+pub(crate) const VALUE_DECIMALS: i32 = 6;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SimEvent {

@@ -15,7 +15,7 @@ mod tcp;
 pub use jsonl::JsonlSink;
 pub use mqtt::MqttSink;
 pub use stdout::StdoutSink;
-pub use tcp::{TcpSink, encode_frames};
+pub use tcp::TcpSink;
 
 use crate::event::SimEvent;
 use crate::scenario::{SinkDef, SinkKind};
@@ -119,7 +119,7 @@ pub fn build_sink(def: &SinkDef, monitor: &SinkMonitor) -> anyhow::Result<Box<dy
 }
 
 /// One JSON object per line, as written by every sink.
-pub fn to_json_line(event: &SimEvent) -> String {
+pub(crate) fn to_json_line(event: &SimEvent) -> String {
     serde_json::to_string(event).expect("events always serialise")
 }
 

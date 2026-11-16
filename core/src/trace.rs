@@ -134,7 +134,7 @@ fn line_of(text: &str, slice: &str) -> usize {
 
 /// JSON without the whitespace between tokens. Everything else is kept: key order, number
 /// literals, escapes and duplicate keys.
-pub fn compact_json(json: &str) -> String {
+fn compact_json(json: &str) -> String {
     let mut out = String::with_capacity(json.len());
     let mut in_string = false;
     let mut escaped = false;
@@ -172,7 +172,7 @@ pub struct Timed {
 
 /// Every send step of `traces` in time order, as if the traces were played side by side. Ties go
 /// by trace order, then step order.
-pub fn merge(traces: &[Trace]) -> Vec<Timed> {
+pub(crate) fn merge(traces: &[Trace]) -> Vec<Timed> {
     let mut timed = Vec::new();
     for (trace_index, trace) in traces.iter().enumerate() {
         let mut at_ms = 0u64;

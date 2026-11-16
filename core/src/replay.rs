@@ -12,7 +12,7 @@
 
 use crate::command::Control;
 use crate::engine::{ActionAvailability, MmView, MotionView, Place, SensorView, WorldState};
-use crate::event::{EventBody, SCHEMA_VERSION, SimEvent};
+use crate::event::{EventBody, HEADING_DECIMALS, POSITION_DECIMALS, SCHEMA_VERSION, SimEvent};
 use crate::geometry::{Vec2, round_to};
 use crate::scenario::{MachineDef, Scenario};
 use crate::sinks::{EventSink, Message, to_json_line};
@@ -530,9 +530,12 @@ impl Replay {
         let def = &self.scenario.mobile_manipulators[index];
         self.seq += 1;
         let timestamp_ms = self.clock_base + self.sim_ms;
-        let (x, y) = (round_to(sample.position.x, 3), round_to(sample.position.y, 3));
-        let heading_rad = round_to(sample.heading.unwrap_or(def.start_heading_rad), 4);
-        let speed_mps = round_to(sample.speed_mps, 3);
+        let (x, y) = (
+            round_to(sample.position.x, POSITION_DECIMALS),
+            round_to(sample.position.y, POSITION_DECIMALS),
+        );
+        let heading_rad = round_to(sample.heading.unwrap_or(def.start_heading_rad), HEADING_DECIMALS);
+        let speed_mps = round_to(sample.speed_mps, POSITION_DECIMALS);
         let json = match self.options.format {
             Format::Envelope => to_json_line(&SimEvent {
                 v: SCHEMA_VERSION,

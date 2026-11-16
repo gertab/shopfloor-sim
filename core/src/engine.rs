@@ -12,7 +12,8 @@
 
 use crate::command::{CommandEnvelope, Control, Origin, SimCommand, Target};
 use crate::event::{
-    DockEvent, EventBody, Lifecycle, MoveEvent, Point, SCHEMA_VERSION, SceneState, SimEvent, UndockEvent,
+    DockEvent, EventBody, HEADING_DECIMALS, Lifecycle, MoveEvent, POSITION_DECIMALS, Point, SCHEMA_VERSION,
+    SceneState, SimEvent, UndockEvent, VALUE_DECIMALS,
 };
 use crate::geometry::{Vec2, path_length, round_to};
 use crate::motion::{PathPlanner, StraightLine};
@@ -27,10 +28,6 @@ use std::sync::Arc;
 
 /// Distances below this count as "already there" (metres).
 const ARRIVAL_EPS_M: f64 = 1e-9;
-/// Decimals kept in event output: positions to the millimetre, headings to ~0.0001 rad.
-const POSITION_DECIMALS: i32 = 3;
-const HEADING_DECIMALS: i32 = 4;
-const VALUE_DECIMALS: i32 = 6;
 
 pub struct Engine {
     scenario: Arc<Scenario>,

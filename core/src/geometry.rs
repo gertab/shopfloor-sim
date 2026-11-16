@@ -102,7 +102,7 @@ impl Rect {
 }
 
 /// Total length of the polyline `start -> points[0] -> points[1] -> ...`.
-pub fn path_length(start: Vec2, points: &[Vec2]) -> f64 {
+pub(crate) fn path_length(start: Vec2, points: &[Vec2]) -> f64 {
     let mut total = 0.0;
     let mut current = start;
     for &point in points {
@@ -113,7 +113,7 @@ pub fn path_length(start: Vec2, points: &[Vec2]) -> f64 {
 }
 
 /// Rounds to a fixed number of decimals (for readable event output; state keeps full precision).
-pub fn round_to(value: f64, decimals: i32) -> f64 {
+pub(crate) fn round_to(value: f64, decimals: i32) -> f64 {
     let factor = 10f64.powi(decimals);
     // `+ 0.0` turns -0.0 into 0.0 so it never serialises as "-0.0".
     (value * factor).round() / factor + 0.0

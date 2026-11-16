@@ -422,29 +422,15 @@ where the MM already is, or a new target for an MM that is already moving, emits
 The keys follow the [Liminal Desk](https://github.com/duncanatt/liminal-desk) traces wherever they describe the same thing
 (`device_id`, `event`, `type`, `target`, `object`, `source`, `destination`, `timestamp_ms`). Every key of a trace
 payload is in the matching event, so a rule written for a trace also works on the simulator's stream. The one
-exception is lidar's `target`. [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md) lists what changed from v1 and how
-to update a consumer.
-
-For a longer sample, [scenarios/sample-floor-events.jsonl](scenarios/sample-floor-events.jsonl) has the first 12.5 s
-(318 events) of the sample floor's `vibration_fault` scene:
-- the simulation and the scene start;
-- mm1 drives to machine2, arrives and picks, then heads to machine3;
-- at 11.9 s its vibration is set to 1.5 g (`sensor_set`), and the next readings show it;
-- position reports and readings from every sensor run alongside throughout.
-
-It was made with:
-
-```bash
-cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene vibration_fault --fast --duration 12.5 \
-    --jsonl scenarios/sample-floor-events.jsonl
-```
+exception is lidar's `target`.
 
 The exact strings are pinned in [core/src/event.rs](core/src/event.rs).
 
 Schema version rule:
 - **Adding** a kind or a field keeps `v`. Consumers should ignore what they don't know.
-- **Renaming, removing or retyping** a field bumps `v`. v2 renamed `ts`, `entity`, `sensor_kind` and an action's
-  `action` (see [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md)).
+- **Renaming, removing or retyping** a field bumps `v`. v2 renamed `ts` to `timestamp_ms`, `entity` to `device_id`,
+  `sensor_kind` to `type` and an action's `action` to `event`, moved `from.at` / `to.at` to `source` / `destination`,
+  and added `dock` and `undock`.
 
 Notes for consumers:
 - Route on the top-level fields, starting with `kind`. No field is nested deeper than `from` / `to`.
@@ -571,7 +557,7 @@ parameters = { broker_url = "mqtt://127.0.0.1:1883", topics = ["shopfloor/sensor
 
 Liminal's `shopfloor` branch has ready-made pipelines for the bundled scenarios in
 [`config/examples/`](https://github.com/gertab/liminal/tree/shopfloor/config/examples). They were written for schema v1,
-so they need the renames in [docs/EVENT_SCHEMA_V2.md](docs/EVENT_SCHEMA_V2.md#updating-your-liminal-configs) first:
+so they need v2's renames first (listed under [Output events](#output-events)):
 
 | Liminal config | Scenario | What it does |
 |---|---|---|
@@ -589,12 +575,6 @@ cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production
 # terminal 2, in the Liminal repo on its shopfloor branch (or open the config in the Liminal GUI and press Run)
 cargo run -- --config config/examples/config_shopfloor_vibr_tcp.toml
 ```
-
-For the die-processing cell, [scenarios/die-processing/liminal-print.toml](scenarios/die-processing/liminal-print.toml)
-is a Liminal config that lives next to the scenario. It receives everything the cell sends, over TCP (port 9000) and
-over MQTT (`die-cell/sensors` and `die-cell/events`, which share every message between them), and prints each message
-under the channel it came by. Run it from the Liminal repo with
-`cargo run -- --config <path to it>` while the scenario replays.
 
 Writing your own pipeline:
 - `tcp_input` makes each whole frame the message payload and keeps no topic, so route on the event's fields, for
