@@ -1,0 +1,452 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "pick",
+        "object": "dies",
+        "timestamp_ms": 1794236400000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "pick",
+        "object": "bonded-dies",
+        "timestamp_ms": 1794236400000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "stocker",
+        "timestamp_ms": 1794236401000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "bonder",
+        "timestamp_ms": 1794236401000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "stocker",
+        "destination": "bonder",
+        "timestamp_ms": 1794236402000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "move",
+        "source": "bonder",
+        "destination": "stocker",
+        "timestamp_ms": 1794236402000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "bonder",
+        "timestamp_ms": 1794236403000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "stocker",
+        "timestamp_ms": 1794236403000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "place",
+        "object": "dies",
+        "timestamp_ms": 1794236404000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "place",
+        "object": "bonded-dies",
+        "timestamp_ms": 1794236404000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "bonder",
+        "timestamp_ms": 1794236405000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "bonder",
+        "destination": "stocker",
+        "timestamp_ms": 1794236406000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "stocker",
+        "timestamp_ms": 1794236406000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "stocker",
+        "timestamp_ms": 1794236407000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "pick",
+        "object": "bonded-dies",
+        "timestamp_ms": 1794236409000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "stocker",
+        "timestamp_ms": 1794236410000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "stocker",
+        "destination": "encaser",
+        "timestamp_ms": 1794236411000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "encaser",
+        "timestamp_ms": 1794236412000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "place",
+        "object": "bonded-dies",
+        "timestamp_ms": 1794236413000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 20000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "pick",
+        "object": "encased-dies",
+        "timestamp_ms": 1794236433000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "encaser",
+        "timestamp_ms": 1794236434000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "encaser",
+        "destination": "stocker",
+        "timestamp_ms": 1794236435000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "stocker",
+        "timestamp_ms": 1794236436000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "place",
+        "object": "encased-dies",
+        "timestamp_ms": 1794236437000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "stocker",
+        "timestamp_ms": 1794236438000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 4000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "stocker",
+        "timestamp_ms": 1794236442000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "pick",
+        "object": "encased-dies",
+        "timestamp_ms": 1794236443000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "stocker",
+        "timestamp_ms": 1794236444000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "move",
+        "source": "stocker",
+        "destination": "deflasher",
+        "timestamp_ms": 1794236445000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "deflasher",
+        "timestamp_ms": 1794236446000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "place",
+        "object": "encased-dies",
+        "timestamp_ms": 1794236447000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 15000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "pick",
+        "object": "deflashed-dies",
+        "timestamp_ms": 1794236462000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "deflasher",
+        "timestamp_ms": 1794236463000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "move",
+        "source": "deflasher",
+        "destination": "stocker",
+        "timestamp_ms": 1794236464000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "stocker",
+        "timestamp_ms": 1794236465000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "place",
+        "object": "deflashed-dies",
+        "timestamp_ms": 1794236466000
+      }
+    }
+  ]
+}

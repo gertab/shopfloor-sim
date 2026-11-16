@@ -16,6 +16,7 @@ name = "Die processing cell"
 [sim]
 tick_ms = 20
 seed = 11
+start_paused = true      # opens paused in the app: Resume (or Space) starts the clock
 
 [floor]
 width_m = 10.0
