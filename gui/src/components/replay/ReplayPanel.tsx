@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, FolderOpen, Play, Square } from "lucide-react";
+import { ChevronDown, ChevronRight, FileJson, Play, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReplayChoice } from "../../hooks/useSimulation";
 import type { ReplayFormat, Scenario, WorldState } from "../../types";
@@ -15,9 +15,14 @@ interface ReplayPanelProps {
 const fileName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
+const FORMAT_CAPTIONS: Record<ReplayFormat, string> = {
+  payload: "Each payload exactly as in the trace.",
+  envelope: "Adds v, seq, sim_ms and kind in front of each payload.",
+};
+
 /**
- * Replaying Liminal Desk traces on this layout: which traces and how (from the scenario's [replay],
- * if any), then progress. Collapsed while the scenario names no traces.
+ * Replaying Liminal Desk traces on this layout: which traces and how (starting from the scenario's
+ * [replay], if any), then progress. Folded away while the scenario names no traces.
  */
 export function ReplayPanel({ scenario, world, onPickTraces, onStart, onStop }: ReplayPanelProps) {
   const status = world?.replay ?? null;
@@ -34,10 +39,16 @@ export function ReplayPanel({ scenario, world, onPickTraces, onStart, onStop }: 
     setPositions(scenario.replay?.positions ?? false);
   }, [scenario]);
 
-  const chooseTraces = async () => {
+  const addTraces = async () => {
     const picked = await onPickTraces();
-    if (picked && picked.length > 0) setTraces(picked);
+    if (picked && picked.length > 0) {
+      setTraces((current) => [...current, ...picked.filter((path) => !current.includes(path))]);
+    }
   };
+
+  const removeTrace = (path: string) => setTraces((current) => current.filter((item) => item !== path));
+
+  const state = status ? (status.done ? "done" : world?.paused ? "paused" : "running") : null;
 
   return (
     <section className="panel-section replay-panel">
@@ -46,89 +57,138 @@ export function ReplayPanel({ scenario, world, onPickTraces, onStart, onStop }: 
         className="panel-toggle"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title={open ? "Hide the replay settings" : "Replay Liminal Desk traces on this layout"}
+        title={open ? "Hide the replay settings" : "Replay Liminal Desk traces on this floor"}
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         <h2>Replay</h2>
-        {status && <span className={`replay-state${status.done ? " is-done" : ""}`}>{status.done ? "done" : "running"}</span>}
+        {!open && !state && <span className="panel-subtitle">· Liminal Desk traces</span>}
+        {state && <span className={`replay-state is-${state}`}>{state}</span>}
       </button>
 
-      {open &&
-        (status ? (
-          <div className="replay-body">
+      {open && status && (
+        <div className="replay-body">
+          <div className="replay-title">
+            {status.done
+              ? "Replay finished"
+              : `Replaying ${status.traces.length} Liminal Desk ${status.traces.length === 1 ? "trace" : "traces"}`}
+          </div>
+          <div className="replay-progress-row">
             <div className="replay-progress" aria-hidden>
               <div style={{ width: `${status.total > 0 ? (100 * status.sent) / status.total : 100}%` }} />
             </div>
-            <div className="small">
-              {seconds(world?.sim_ms ?? 0)} / {seconds(status.duration_ms)} · {status.sent} of {status.total} payloads
-              {status.done ? " · done" : world?.paused ? " · paused" : ""}
-            </div>
-            <ul className="replay-traces">
-              {status.traces.map((name) => (
-                <li key={name}>{name}</li>
-              ))}
-            </ul>
-            <div className="muted small">
-              {status.format} format{status.positions ? " · with positions" : ""}
-            </div>
-            <div className="replay-actions">
-              <button type="button" className="chip-button danger" onClick={onStop} title="Stop the replay and simulate this layout">
-                <Square size={11} />
-                Stop replay
+            <span className="replay-time">
+              {seconds(world?.sim_ms ?? 0)} of {seconds(status.duration_ms)}
+            </span>
+          </div>
+          <div className="field-caption">
+            {status.sent.toLocaleString()} of {status.total.toLocaleString()} payloads sent
+          </div>
+          <ul className="replay-trace-list">
+            {status.traces.map((name) => (
+              <li key={name} className="replay-trace">
+                <FileJson size={13} />
+                <span className="replay-trace-name">{name}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="field-caption">
+            {status.format === "payload" ? "Payload" : "Envelope"} format · positions {status.positions ? "on" : "off"}
+          </div>
+          <button type="button" className="primary-button danger" onClick={onStop} title="Stop the replay and simulate this floor">
+            <Square size={12} />
+            Stop replay
+          </button>
+          <p className="hint">Manual control is off. Pause and Reset in the toolbar act on the replay.</p>
+        </div>
+      )}
+
+      {open && !status && (
+        <div className="replay-body">
+          <p className="replay-intro">
+            Plays Liminal Desk traces on this floor. Their payloads go to the outputs at their recorded
+            times, exactly as written.
+          </p>
+          {/*  Nothing else is simulated. */}
+
+          <div className="replay-card">
+            <div className="replay-card-header">
+              <span>Traces</span>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void addTraces()}
+                title="Add one or more Liminal Desk trace files"
+              >
+                Add…
               </button>
             </div>
-            <p className="hint">Pause and Reset in the toolbar act on the replay. Manual control is off until it stops.</p>
-          </div>
-        ) : (
-          <div className="replay-body">
             {traces.length > 0 ? (
-              <ul className="replay-traces">
+              <ul className="replay-trace-list">
                 {traces.map((path) => (
-                  <li key={path} title={path}>
-                    {fileName(path)}
+                  <li key={path} className="replay-trace" title={path}>
+                    <FileJson size={13} />
+                    <span className="replay-trace-name">{fileName(path)}</span>
+                    <button
+                      type="button"
+                      className="replay-trace-remove"
+                      onClick={() => removeTrace(path)}
+                      title={`Remove ${fileName(path)}`}
+                      aria-label={`Remove ${fileName(path)}`}
+                    >
+                      <X size={12} />
+                    </button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="hint">No traces chosen.</p>
+              <p className="replay-empty">No traces yet. Add one or more Liminal Desk trace files (.json).</p>
             )}
-            <div className="replay-actions">
-              <button type="button" className="chip-button" onClick={() => void chooseTraces()} title="Pick one or more trace files">
-                <FolderOpen size={12} />
-                Choose traces…
-              </button>
-            </div>
-            <div className="replay-options">
-              <label title="How each payload is written: as in the trace, or with v, seq, sim_ms and kind in front">
-                format
-                <select value={format} onChange={(event) => setFormat(event.target.value as ReplayFormat)}>
-                  <option value="payload">payload</option>
-                  <option value="envelope">envelope</option>
-                </select>
-              </label>
-              <label title="Also report the positions of moving MMs">
-                <input type="checkbox" checked={positions} onChange={(event) => setPositions(event.target.checked)} />
-                positions
-              </label>
-            </div>
-            <div className="replay-actions">
-              <button
-                type="button"
-                className="chip-button replay-start"
-                disabled={traces.length === 0}
-                onClick={() => onStart(traces, { envelope: format === "envelope", positions })}
-                title={traces.length === 0 ? "Choose traces first" : "Replay these traces on this layout"}
-              >
-                <Play size={11} />
-                Start replay
-              </button>
-            </div>
-            <p className="hint">
-              Plays the traces' payloads at their recorded times and nothing else. The MMs follow their undock, move and
-              dock events.
-            </p>
           </div>
-        ))}
+
+          <div className="field-grid">
+            <span className="field-label">Output</span>
+            <div>
+              <div className="segmented" role="radiogroup" aria-label="Output format">
+                {(["payload", "envelope"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={format === value}
+                    className={format === value ? "is-active" : ""}
+                    onClick={() => setFormat(value)}
+                  >
+                    {value === "payload" ? "Payload" : "Envelope"}
+                  </button>
+                ))}
+              </div>
+              <div className="field-caption">{FORMAT_CAPTIONS[format]}</div>
+            </div>
+
+            <span className="field-label">Positions</span>
+            <div>
+              <label className="field-check">
+                <input type="checkbox" checked={positions} onChange={(event) => setPositions(event.target.checked)} />
+                Report MM positions
+              </label>
+              <div className="field-caption">
+                Every {scenario.output.position_interval_ms} ms while an MM moves.
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="primary-button"
+            disabled={traces.length === 0}
+            onClick={() => onStart(traces, { envelope: format === "envelope", positions })}
+            title={traces.length === 0 ? "Add a trace first" : "Replay these traces on this floor"}
+          >
+            <Play size={12} />
+            Start replay
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -69,7 +69,7 @@ export interface SensorDef {
 export interface Scenario {
   name: string;
   source_path: string | null;
-  sim: { tick_ms: number; seed: number; dock_tolerance_m: number };
+  sim: { tick_ms: number; seed: number; dock_tolerance_m: number; start_paused: boolean };
   floor: { width_m: number; height_m: number; grid_m: number };
   machines: MachineDef[];
   mobile_manipulators: MmDef[];

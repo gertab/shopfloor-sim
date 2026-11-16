@@ -73,6 +73,9 @@ pub struct SimSettings {
     /// An MM within this distance of a machine's dock is "at" that machine.
     #[serde(default = "default_dock_tolerance_m")]
     pub dock_tolerance_m: f64,
+    /// Open paused in the app: the clock waits at 0 until Resume. Real-time CLI runs ignore it.
+    #[serde(default)]
+    pub start_paused: bool,
 }
 
 impl Default for SimSettings {
@@ -81,6 +84,7 @@ impl Default for SimSettings {
             tick_ms: default_tick_ms(),
             seed: default_seed(),
             dock_tolerance_m: default_dock_tolerance_m(),
+            start_paused: false,
         }
     }
 }
@@ -952,6 +956,7 @@ mod tests {
         let scenario = parse_scenario(MINIMAL, None).unwrap();
         assert_eq!(scenario.name, "Test cell");
         assert_eq!(scenario.sim, SimSettings::default());
+        assert!(!scenario.sim.start_paused);
         assert_eq!(scenario.machines.len(), 2);
         assert_eq!(scenario.machines[0].label, "machine1");
         // Default dock: centred, 0.5 m below the footprint.

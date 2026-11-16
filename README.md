@@ -206,6 +206,7 @@ they stay readable. On a large floor, set `grid_m` and `dock_tolerance_m` to mat
 | `[sim] tick_ms` | 20 | Fixed engine step |
 | `[sim] seed` | 42 | Noise RNG seed (runs are reproducible) |
 | `[sim] dock_tolerance_m` | 0.3 | An MM this close to a dock counts as "at" that machine |
+| `[sim] start_paused` | false | Open paused in the app: the clock waits at 0 until you press Resume (or Space). `shopfloor run` ignores it. |
 | `[floor] width_m`, `height_m` | required | Floor size |
 | `[floor] grid_m` | 1.0 | Grid spacing in the UI |
 | `[machines.<id>] position`, `size` | required | Footprint centre `[x, y]` and `[w, h]` |
@@ -513,10 +514,16 @@ How a replay works:
 
 In the app, the **Replay** section at the top of the right-hand panel:
 - It's open when the scenario has a `[replay]` section, and folded away otherwise.
-- It lists the traces to play. **Choose traces…** picks others, opening in the scenario's folder.
-- Its selector chooses `payload` or `envelope`, and its checkbox turns position reports on.
-- **Start replay** starts. During the replay the section shows progress, and **Stop replay** goes back to simulating
-  the same layout. The toolbar's Pause and Reset act on the replay.
+- **Traces** lists the files to play, starting with the scenario's `[replay] traces`.
+  - **Add…** adds files, opening in the scenario's folder.
+  - **×** removes one.
+  - The list order breaks ties between traces that send at the same moment.
+  - Changes here aren't written back to the scenario file.
+- **Output** switches between `payload` and `envelope`, and **Positions** turns position reports on.
+- **Start replay** starts.
+  - During the replay the section shows progress (time, payloads sent) and whether it's running, paused or done.
+  - **Stop replay** goes back to simulating the same layout.
+  - The toolbar's Pause and Reset act on the replay.
 - The log shows exactly what the outputs send.
 
 Checks:

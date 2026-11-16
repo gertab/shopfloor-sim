@@ -293,6 +293,12 @@ async fn run_engine(
     interval.tick().await; // the first tick completes immediately
 
     publish(&events, engine.start(now_ms()));
+    // A scenario can open paused: `sim started`, then `sim paused`, and the clock waits at 0.
+    if engine.scenario().sim.start_paused {
+        let batch = engine.control(Control::Pause, now_ms()).expect("pausing never fails");
+        publish(&events, batch);
+        state.send_replace(engine.state());
+    }
     loop {
         tokio::select! {
             request = requests.recv() => match request {
@@ -476,6 +482,38 @@ mod tests {
             "{\"device_id\":\"mm1\",\"event\":\"undock\",\"target\":\"m1\"}\n\
              {\"type\":\"vibration\",\"device_id\":\"mm1\",\"value\":0.20}\n"
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_scenario_can_open_paused() {
+        let path = std::env::temp_dir().join(format!(
+            "shopfloor-start-paused-test-{}.jsonl",
+            std::process::id()
+        ));
+        let mut scenario = (*scenario_recording_to(&path)).clone();
+        scenario.sim.start_paused = true;
+        let runtime = SimRuntime::spawn(Arc::new(scenario)).unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let state = runtime.state();
+        assert!(state.paused);
+        assert_eq!(state.sim_ms, 0, "the clock waits");
+
+        runtime.control(Control::Resume).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(runtime.state().sim_ms > 0);
+        runtime.shutdown().await;
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        let lifecycle: Vec<String> = text
+            .lines()
+            .map(|line| serde_json::from_str::<SimEvent>(line).unwrap())
+            .filter_map(|event| match event.body {
+                crate::event::EventBody::Sim { state, .. } => Some(format!("{state:?}")),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lifecycle, ["Started", "Paused", "Resumed"]);
     }
 
     #[tokio::test]

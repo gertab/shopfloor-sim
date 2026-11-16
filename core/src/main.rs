@@ -165,8 +165,12 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
     let scenario = load_scenario(path)?;
     println!("Scenario '{}' ({}): OK", scenario.name, path.display());
     println!(
-        "Floor {} × {} m, tick {} ms, seed {}",
-        scenario.floor.width_m, scenario.floor.height_m, scenario.sim.tick_ms, scenario.sim.seed
+        "Floor {} × {} m, tick {} ms, seed {}{}",
+        scenario.floor.width_m,
+        scenario.floor.height_m,
+        scenario.sim.tick_ms,
+        scenario.sim.seed,
+        if scenario.sim.start_paused { ", starts paused (in the app)" } else { "" }
     );
     println!("Machines ({}):", scenario.machines.len());
     for machine in &scenario.machines {
@@ -273,6 +277,11 @@ fn run(
 ) -> anyhow::Result<ExitCode> {
     let mut scenario = load_scenario(path)?;
     add_cli_sinks(&mut scenario, jsonl, tcp);
+    if scenario.sim.start_paused {
+        // Nobody could press Resume in a headless run.
+        tracing::info!("ignoring [sim] start_paused: a headless run starts at once");
+        scenario.sim.start_paused = false;
+    }
     if let Some(id) = &scene
         && scenario.scene_index(id).is_none()
     {

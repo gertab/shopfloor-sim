@@ -489,10 +489,29 @@ h3 {
   margin-bottom: 0;
 }
 
-.replay-panel .replay-body {
-  margin-top: 10px;
+.panel-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --- Replay section ------------------------------------------------------------------------------ */
+
+.replay-body {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.replay-intro {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.replay-intro strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .replay-state {
@@ -504,62 +523,222 @@ h3 {
   font-size: 11px;
 }
 
+.replay-state.is-paused {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 .replay-state.is-done {
   border-color: var(--border-strong);
   color: var(--text-muted);
 }
 
-.replay-traces {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 12px;
-}
-
-.replay-traces li {
-  padding: 3px 8px;
-  margin-bottom: 3px;
+.replay-card {
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--bg-elevated);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.replay-options {
+.replay-card-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
 }
 
-.replay-options label {
+.link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.replay-trace-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-card .replay-trace-list {
+  padding: 4px 0;
+}
+
+.replay-trace {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.replay-card .replay-trace {
+  padding: 3px 6px 3px 10px;
+}
+
+.replay-trace svg {
+  flex: none;
+}
+
+.replay-trace-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.replay-trace-remove {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.replay-trace:hover .replay-trace-remove {
+  opacity: 1;
+}
+
+.replay-trace-remove:hover {
+  background: var(--bg-input);
+  color: var(--danger);
+}
+
+.replay-empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 10px 8px;
+  align-items: start;
+}
+
+.field-label {
+  padding-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.field-caption {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.replay-body > .field-caption {
+  margin-top: -6px;
+}
+
+.field-check {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-}
-
-.replay-options select {
-  height: 22px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--bg-input);
-  font-size: 11px;
-}
-
-.replay-actions {
-  display: flex;
   gap: 6px;
+  padding-top: 3px;
+  font-size: 12px;
 }
 
-.chip-button.replay-start:hover:not(:disabled) {
-  border-color: var(--accent);
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.segmented button {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.segmented button.is-active {
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
+.segmented button:not(.is-active):hover {
+  color: var(--text);
+}
+
+.primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.primary-button:disabled {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.primary-button.danger {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.primary-button.danger:hover {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+.replay-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.replay-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .replay-progress {
+  flex: 1;
   height: 4px;
   border-radius: 2px;
   background: var(--bg-input);
@@ -569,6 +748,13 @@ h3 {
 .replay-progress > div {
   height: 100%;
   background: var(--accent);
+}
+
+.replay-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .hint {
