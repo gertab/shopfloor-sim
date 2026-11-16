@@ -15,6 +15,3 @@ docs/
 !/README.md
 
 .DS_Store
-
-# Traces from outside the project (e.g. Liminal Desk)
-outside_configs/

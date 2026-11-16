@@ -5,11 +5,13 @@ import type { Control, Scenario, WorldState } from "../../types";
 interface ScenesPanelProps {
   scenario: Scenario;
   world: WorldState | null;
+  /** Why scenes can't be played or stopped right now (a trace replay), else null. */
+  readOnly: string | null;
   onControl: (control: Control) => void;
 }
 
 /** The scenario's scenes: play / stop, and live progress of the playing one. */
-export function ScenesPanel({ scenario, world, onControl }: ScenesPanelProps) {
+export function ScenesPanel({ scenario, world, readOnly, onControl }: ScenesPanelProps) {
   const playing = world?.scene ?? null;
   return (
     <section className="panel-section">
@@ -33,6 +35,7 @@ export function ScenesPanel({ scenario, world, onControl }: ScenesPanelProps) {
                   type="button"
                   className="chip-button danger"
                   title="Stop the scene (the world keeps running)"
+                  disabled={readOnly !== null}
                   onClick={() => onControl("stop_scene")}
                 >
                   <Square size={11} />
@@ -42,7 +45,8 @@ export function ScenesPanel({ scenario, world, onControl }: ScenesPanelProps) {
                 <button
                   type="button"
                   className="chip-button scene-play"
-                  title={playing ? `Stop '${playing.label}' and play this scene` : "Play this scene"}
+                  title={readOnly ?? (playing ? `Stop '${playing.label}' and play this scene` : "Play this scene")}
+                  disabled={readOnly !== null}
                   onClick={() => onControl({ play_scene: scene.id })}
                 >
                   <Play size={11} />
@@ -77,6 +81,7 @@ export function ScenesPanel({ scenario, world, onControl }: ScenesPanelProps) {
         );
       })}
       {playing && <p className="hint">Manual control still works while a scene plays.</p>}
+      {readOnly && scenario.scenes.length > 0 && <p className="hint">Scenes are off while a trace is replayed.</p>}
     </section>
   );
 }

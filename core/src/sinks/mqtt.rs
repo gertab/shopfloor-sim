@@ -6,8 +6,7 @@
 //! it is connected. Events from before the first connection attempt has finished are queued, so a
 //! run started with the broker up delivers everything from `sim started`.
 
-use super::{EventSink, SinkMonitor, to_json_line};
-use crate::event::SimEvent;
+use super::{EventSink, Message, SinkMonitor};
 use crate::scenario::{MqttTopic, parse_broker};
 use anyhow::{anyhow, bail};
 use rumqttc::{Client, Connection, Event, MqttOptions, Outgoing, Packet, QoS};
@@ -102,11 +101,11 @@ impl MqttSink {
     }
 }
 
-/// The topics an event is published to, in the order they are configured.
-fn topics_for<'a>(topics: &'a [MqttTopic], event: &SimEvent) -> Vec<&'a str> {
+/// The topics a message is published to, in the order they are configured.
+fn topics_for<'a>(topics: &'a [MqttTopic], message: &Message) -> Vec<&'a str> {
     topics
         .iter()
-        .filter(|topic| topic.matches(event))
+        .filter(|topic| topic.matches(message.kind, message.device_id.as_deref()))
         .map(|topic| topic.topic.as_str())
         .collect()
 }
@@ -170,19 +169,19 @@ fn run_event_loop(
 }
 
 impl EventSink for MqttSink {
-    fn write_batch(&mut self, events: &[SimEvent]) -> std::io::Result<()> {
+    fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
         let Some(client) = &self.client else {
             return Ok(());
         };
         if !self.shared.open.load(Ordering::Relaxed) {
             return Ok(());
         }
-        for event in events {
-            let topics = topics_for(&self.topics, event);
+        for message in messages {
+            let topics = topics_for(&self.topics, message);
             if topics.is_empty() {
                 continue;
             }
-            let payload = to_json_line(event);
+            let payload = message.json.clone();
             for topic in topics {
                 match client.try_publish(topic, self.qos, false, payload.clone()) {
                     Ok(()) => self.queue_full = false,
@@ -232,21 +231,21 @@ impl Drop for MqttSink {
 mod tests {
     use super::*;
     use crate::command::Origin;
-    use crate::event::{EventBody, Lifecycle, SCHEMA_VERSION};
+    use crate::event::{EventBody, Lifecycle, SCHEMA_VERSION, SimEvent};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
 
-    fn event(seq: u64, body: EventBody) -> SimEvent {
-        SimEvent {
+    fn event(seq: u64, body: EventBody) -> Message {
+        Message::from_event(&SimEvent {
             v: SCHEMA_VERSION,
             seq,
             timestamp_ms: 1000 + seq,
             sim_ms: seq * 20,
             body,
-        }
+        })
     }
 
-    fn sensor_reading(seq: u64) -> SimEvent {
+    fn sensor_reading(seq: u64) -> Message {
         event(
             seq,
             EventBody::Sensor {
@@ -261,7 +260,7 @@ mod tests {
         )
     }
 
-    fn pick(seq: u64, device_id: &str) -> SimEvent {
+    fn pick(seq: u64, device_id: &str) -> Message {
         event(
             seq,
             EventBody::Action {
@@ -277,7 +276,7 @@ mod tests {
         )
     }
 
-    fn sim_started(seq: u64) -> SimEvent {
+    fn sim_started(seq: u64) -> Message {
         event(
             seq,
             EventBody::Sim {
@@ -319,6 +318,19 @@ mod tests {
         assert_eq!(topics_for(&both, &pick(5, "mm2")), ["t"]);
         assert!(topics_for(&both, &pick(6, "mm1")).is_empty());
         assert!(topics_for(&both, &sensor_reading(7)).is_empty());
+    }
+
+    #[test]
+    fn a_message_of_unknown_kind_only_goes_to_topics_without_a_kind_filter() {
+        let topics = sample_topics();
+        let message = Message {
+            seq: 1,
+            sim_ms: 0,
+            kind: None,
+            device_id: Some("mm1".into()),
+            json: r#"{"device_id":"mm1","note":"hello"}"#.into(),
+        };
+        assert_eq!(topics_for(&topics, &message), ["shopfloor/mm1", "shopfloor/all"]);
     }
 
     /// Reads one MQTT packet: its first header byte and its body.
@@ -392,7 +404,7 @@ mod tests {
             ("shopfloor/all", &batch[2]),
         ];
         for (topic, event) in expected {
-            assert_eq!(read_publish(&mut stream), (topic.to_string(), to_json_line(event)));
+            assert_eq!(read_publish(&mut stream), (topic.to_string(), event.json.clone()));
         }
 
         // The broker goes away and comes back: the sink reconnects by itself, and what happened
@@ -403,7 +415,7 @@ mod tests {
         let mut stream = accept_client(&listener);
         wait_for_status(&monitor, "connected to");
         sink.write_batch(&[sim_started(5)]).unwrap();
-        let expected = ("shopfloor/all".to_string(), to_json_line(&sim_started(5)));
+        let expected = ("shopfloor/all".to_string(), sim_started(5).json);
         assert_eq!(read_publish(&mut stream), expected);
 
         sink.close().unwrap();

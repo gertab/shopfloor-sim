@@ -4,8 +4,7 @@
 //! sent with a single `write_all` per client so frames arrive whole (some readers are
 //! sensitive to frames split across their read timeout).
 
-use super::{EventSink, SinkMonitor, to_json_line};
-use crate::event::SimEvent;
+use super::{EventSink, Message, SinkMonitor};
 use anyhow::Context;
 use std::io::{ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -105,24 +104,23 @@ fn status(addr: SocketAddr, clients: usize) -> String {
     format!("listening on {addr} · {clients} connected")
 }
 
-/// Length-prefixed frames (4-byte big-endian length + JSON) for a batch of events.
-pub fn encode_frames(events: &[SimEvent]) -> Vec<u8> {
+/// Length-prefixed frames (4-byte big-endian length + JSON) for a batch of messages.
+pub fn encode_frames(messages: &[Message]) -> Vec<u8> {
     let mut frames = Vec::new();
-    for event in events {
-        let json = to_json_line(event);
-        frames.extend_from_slice(&(json.len() as u32).to_be_bytes());
-        frames.extend_from_slice(json.as_bytes());
+    for message in messages {
+        frames.extend_from_slice(&(message.json.len() as u32).to_be_bytes());
+        frames.extend_from_slice(message.json.as_bytes());
     }
     frames
 }
 
 impl EventSink for TcpSink {
-    fn write_batch(&mut self, events: &[SimEvent]) -> std::io::Result<()> {
+    fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
         let mut clients = self.clients.lock().expect("clients lock");
-        if clients.is_empty() || events.is_empty() {
+        if clients.is_empty() || messages.is_empty() {
             return Ok(());
         }
-        let frames = encode_frames(events);
+        let frames = encode_frames(messages);
         let before = clients.len();
         clients.retain_mut(|client| match client.stream.write_all(&frames) {
             Ok(()) => true,
@@ -153,7 +151,7 @@ impl EventSink for TcpSink {
 mod tests {
     use super::*;
     use crate::command::Origin;
-    use crate::event::{EventBody, SCHEMA_VERSION};
+    use crate::event::{EventBody, SCHEMA_VERSION, SimEvent};
     use std::io::Read;
 
     fn sample(seq: u64) -> SimEvent {
@@ -173,6 +171,10 @@ mod tests {
                 origin: Origin::Scene,
             },
         }
+    }
+
+    fn messages(events: &[SimEvent]) -> Vec<Message> {
+        events.iter().map(Message::from_event).collect()
     }
 
     fn read_frame(stream: &mut TcpStream) -> SimEvent {
@@ -205,12 +207,12 @@ mod tests {
         let mut sink = TcpSink::bind("tcp", "127.0.0.1:0", monitor.clone()).unwrap();
         assert!(monitor.snapshot()["tcp"].ends_with("· 0 connected"));
         // Nobody connected yet: writing is a no-op.
-        sink.write_batch(&[sample(1)]).unwrap();
+        sink.write_batch(&messages(&[sample(1)])).unwrap();
 
         let mut first = connect(&sink, &monitor, 1);
         let mut second = connect(&sink, &monitor, 2);
         let batch = vec![sample(2), sample(3)];
-        sink.write_batch(&batch).unwrap();
+        sink.write_batch(&messages(&batch)).unwrap();
         for client in [&mut first, &mut second] {
             assert_eq!(read_frame(client), batch[0]);
             assert_eq!(read_frame(client), batch[1]);
@@ -219,7 +221,7 @@ mod tests {
         // A client that goes away is dropped; the other keeps receiving.
         drop(first);
         for seq in 4..20 {
-            sink.write_batch(&[sample(seq)]).unwrap();
+            sink.write_batch(&messages(&[sample(seq)])).unwrap();
             assert_eq!(read_frame(&mut second).seq, seq);
         }
         assert!(monitor.snapshot()["tcp"].ends_with("· 1 connected"));

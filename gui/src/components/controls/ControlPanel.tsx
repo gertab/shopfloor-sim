@@ -2,7 +2,8 @@ import { Hand, Navigation, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { formatPoint, formatSimTime, formatValue, machineLabel, mmColor } from "../../format";
-import type { ActionEvent } from "../../hooks/useSimulation";
+import type { LastAction, ReplayChoice } from "../../hooks/useSimulation";
+import { ReplayPanel } from "../replay/ReplayPanel";
 import { ScenesPanel } from "../scenes/ScenesPanel";
 import type { Control, MmDef, MmView, Scenario, SensorDef, SensorView, SimCommand, WorldState } from "../../types";
 import type { Focus } from "../floor/FloorView";
@@ -15,7 +16,12 @@ interface ControlPanelProps {
   world: WorldState | null;
   selectedMm: string | null;
   focus: Focus;
-  lastActions: Record<string, ActionEvent>;
+  lastActions: Record<string, LastAction>;
+  /** Why nothing can be done by hand right now (a trace replay), else null. */
+  readOnly: string | null;
+  onPickTraces: () => Promise<string[] | null>;
+  onStartReplay: (paths: string[], choice: ReplayChoice) => void;
+  onStopReplay: () => void;
   onSelectMm: (id: string) => void;
   onFocusSensor: (id: string) => void;
   send: (command: SimCommand) => void;
@@ -28,6 +34,10 @@ export function ControlPanel({
   selectedMm,
   focus,
   lastActions,
+  readOnly,
+  onPickTraces,
+  onStartReplay,
+  onStopReplay,
   onSelectMm,
   onFocusSensor,
   send,
@@ -39,7 +49,14 @@ export function ControlPanel({
 
   return (
     <aside className="controls">
-      <ScenesPanel scenario={scenario} world={world} onControl={onControl} />
+      <ReplayPanel
+        scenario={scenario}
+        world={world}
+        onPickTraces={onPickTraces}
+        onStart={onStartReplay}
+        onStop={onStopReplay}
+      />
+      <ScenesPanel scenario={scenario} world={world} readOnly={readOnly} onControl={onControl} />
 
       <section className="panel-section">
         <h2>Mobile manipulators</h2>
@@ -52,14 +69,22 @@ export function ControlPanel({
             scenario={scenario}
             selected={def.id === selectedMm}
             lastAction={lastActions[def.id]}
+            readOnly={readOnly}
             onSelect={() => onSelectMm(def.id)}
             send={send}
           />
         ))}
-        <p className="hint">
-          Select an MM, then click a machine or any point on the floor to send it there. Esc
-          deselects. Actions only produce an event; greyed-out ones explain why on hover.
-        </p>
+        {readOnly ? (
+          <p className="hint">
+            Replaying a trace: the MMs follow its undock, move and dock events, and manual control is
+            off. Stop the replay to drive them again.
+          </p>
+        ) : (
+          <p className="hint">
+            Select an MM, then click a machine or any point on the floor to send it there. Esc
+            deselects. Actions only produce an event; greyed-out ones explain why on hover.
+          </p>
+        )}
       </section>
 
       <section className="panel-section">
@@ -74,6 +99,7 @@ export function ControlPanel({
                 view={sensorViews.get(def.id)}
                 focused={focus?.type === "sensor" && focus.id === def.id}
                 highlighted={focus?.type === "machine" && focus.id === host}
+                readOnly={readOnly}
                 onFocus={() => onFocusSensor(def.id)}
                 send={send}
               />
@@ -113,12 +139,13 @@ interface MmCardProps {
   color: string;
   scenario: Scenario;
   selected: boolean;
-  lastAction: ActionEvent | undefined;
+  lastAction: LastAction | undefined;
+  readOnly: string | null;
   onSelect: () => void;
   send: (command: SimCommand) => void;
 }
 
-function MmCard({ def, view, color, scenario, selected, lastAction, onSelect, send }: MmCardProps) {
+function MmCard({ def, view, color, scenario, selected, lastAction, readOnly, onSelect, send }: MmCardProps) {
   const motion = view?.motion ?? null;
   let status = "–";
   if (view && motion) {
@@ -153,8 +180,8 @@ function MmCard({ def, view, color, scenario, selected, lastAction, onSelect, se
             key={machine.id}
             type="button"
             className="chip-button"
-            disabled={view?.at === machine.id && !motion}
-            title={`Send ${def.label} to ${machine.label}`}
+            disabled={readOnly !== null || (view?.at === machine.id && !motion)}
+            title={readOnly ?? `Send ${def.label} to ${machine.label}`}
             onClick={() => send({ type: "move_to", mm: def.id, target: { machine: machine.id } })}
           >
             <Navigation size={12} />
@@ -164,8 +191,8 @@ function MmCard({ def, view, color, scenario, selected, lastAction, onSelect, se
         <button
           type="button"
           className="chip-button danger"
-          disabled={!motion}
-          title={`Stop ${def.label}`}
+          disabled={readOnly !== null || !motion}
+          title={readOnly ?? `Stop ${def.label}`}
           onClick={() => send({ type: "stop", mm: def.id })}
         >
           <Square size={11} />
@@ -195,8 +222,12 @@ function MmCard({ def, view, color, scenario, selected, lastAction, onSelect, se
       {lastAction && (
         <div className="muted small last-action">
           last action: {lastAction.event}
-          {lastAction.at ? ` at ${machineLabel(scenario, lastAction.at)}` : ` at ${formatPoint(lastAction.x, lastAction.y)}`} ·{" "}
-          {formatSimTime(lastAction.sim_ms)}
+          {lastAction.at
+            ? ` at ${machineLabel(scenario, lastAction.at)}`
+            : lastAction.x !== null && lastAction.y !== null
+              ? ` at ${formatPoint(lastAction.x, lastAction.y)}`
+              : ""}{" "}
+          · {formatSimTime(lastAction.sim_ms)}
         </div>
       )}
     </div>
@@ -208,11 +239,13 @@ interface SensorControlProps {
   view: SensorView | undefined;
   focused: boolean;
   highlighted: boolean;
+  readOnly: string | null;
   onFocus: () => void;
   send: (command: SimCommand) => void;
 }
 
-function SensorControl({ def, view, focused, highlighted, onFocus, send }: SensorControlProps) {
+function SensorControl({ def, view, focused, highlighted, readOnly, onFocus, send }: SensorControlProps) {
+  const locked = readOnly !== null;
   const rowRef = useRef<HTMLDivElement>(null);
   const setpoint = view?.setpoint ?? def.default;
   const noise = view?.noise_std ?? def.noise_std;
@@ -315,6 +348,8 @@ function SensorControl({ def, view, focused, highlighted, onFocus, send }: Senso
           step={step}
           value={shown}
           aria-label={`${def.label} setpoint`}
+          disabled={locked}
+          title={readOnly ?? undefined}
           onChange={(event) => onSlider(Number(event.target.value))}
         />
         <input
@@ -325,6 +360,8 @@ function SensorControl({ def, view, focused, highlighted, onFocus, send }: Senso
           step={step}
           value={valueText ?? String(Number(shown.toFixed(6)))}
           aria-label={`${def.label} setpoint value`}
+          disabled={locked}
+          title={readOnly ?? undefined}
           onChange={(event) => setValueText(event.target.value)}
           onBlur={commitValue}
           onKeyDown={blurOnEnter}
@@ -332,8 +369,8 @@ function SensorControl({ def, view, focused, highlighted, onFocus, send }: Senso
         <button
           type="button"
           className="icon-button"
-          title={`Reset to default (${def.default} ${def.unit})`}
-          disabled={setpoint === def.default}
+          title={readOnly ?? `Reset to default (${def.default} ${def.unit})`}
+          disabled={locked || setpoint === def.default}
           onClick={(event) => {
             event.stopPropagation();
             sendSetpoint(def.default);
@@ -344,8 +381,9 @@ function SensorControl({ def, view, focused, highlighted, onFocus, send }: Senso
         <button
           type="button"
           className={`icon-button${paused ? " is-active" : ""}`}
-          title={paused ? "Resume this sensor's readings" : "Pause this sensor's readings, as if it had failed"}
+          title={readOnly ?? (paused ? "Resume this sensor's readings" : "Pause this sensor's readings, as if it had failed")}
           aria-pressed={paused}
+          disabled={locked}
           onClick={(event) => {
             event.stopPropagation();
             send({ type: "set_sensor_paused", sensor: def.id, paused: !paused });
@@ -366,6 +404,8 @@ function SensorControl({ def, view, focused, highlighted, onFocus, send }: Senso
             min={0}
             step={step}
             value={noiseText ?? String(noise)}
+            disabled={locked}
+            title={readOnly ?? undefined}
             onChange={(event) => setNoiseText(event.target.value)}
             onBlur={commitNoise}
             onKeyDown={blurOnEnter}

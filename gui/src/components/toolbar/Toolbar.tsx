@@ -41,6 +41,7 @@ export function Toolbar({
   onControl,
 }: ToolbarProps) {
   const paused = world?.paused ?? false;
+  const replay = world?.replay ?? null;
   return (
     <header className="toolbar">
       <div className="brand">Shopfloor</div>
@@ -77,7 +78,11 @@ export function Toolbar({
         className="tool-button"
         disabled={!world}
         onClick={() => onControl("reset")}
-        title="Back to the initial state: start positions, default sensor values, time 0"
+        title={
+          replay
+            ? "Start the replay again from the beginning"
+            : "Back to the initial state: start positions, default sensor values, time 0"
+        }
       >
         <RotateCcw size={15} />
         Reset

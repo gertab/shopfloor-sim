@@ -1,15 +1,15 @@
 import { Braces, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { KIND_LABELS, describeEvent, eventDeviceId, formatSimTime } from "../../format";
+import { KIND_LABELS, describeEntry, formatSimTime } from "../../format";
 import { EVENT_KINDS } from "../../types";
-import type { EventKind, Scenario, SimEvent } from "../../types";
+import type { EventKind, LogEntry, Scenario } from "../../types";
 
 /** Rows rendered at most (the hook keeps more for filtering). */
 const MAX_ROWS = 500;
 
 interface EventLogProps {
   scenario: Scenario | null;
-  events: SimEvent[];
+  events: LogEntry[];
   counts: Partial<Record<EventKind, number>>;
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -38,7 +38,7 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
   const rows = useMemo(() => {
     const filtered = events.filter(
       (event) =>
-        !hiddenKinds.has(event.kind) && (entity === "all" || eventDeviceId(event) === entity),
+        !(event.kind && hiddenKinds.has(event.kind)) && (entity === "all" || event.device_id === entity),
     );
     return filtered.slice(-MAX_ROWS);
   }, [events, hiddenKinds, entity]);
@@ -115,14 +115,16 @@ export function EventLog({ scenario, events, counts, collapsed, onToggleCollapse
           {rows.map((event) =>
             raw ? (
               <div key={event.seq} className="event-row raw">
-                {JSON.stringify(event)}
+                {JSON.stringify(event.data)}
               </div>
             ) : (
-              <div key={event.seq} className="event-row" title={JSON.stringify(event)}>
+              <div key={event.seq} className="event-row" title={JSON.stringify(event.data)}>
                 <span className="event-time">{formatSimTime(event.sim_ms)}</span>
-                <span className={`event-kind kind-${event.kind}`}>{KIND_LABELS[event.kind]}</span>
-                <span className="event-entity">{eventDeviceId(event) ?? ""}</span>
-                <span className="event-text">{describeEvent(event, scenario)}</span>
+                <span className={`event-kind kind-${event.kind ?? "other"}`}>
+                  {event.kind ? KIND_LABELS[event.kind] : "other"}
+                </span>
+                <span className="event-entity">{event.device_id ?? ""}</span>
+                <span className="event-text">{describeEntry(event, scenario)}</span>
               </div>
             ),
           )}

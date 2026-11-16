@@ -472,6 +472,105 @@ h3 {
   margin-bottom: 10px;
 }
 
+/* A section whose header folds it away (the Replay section). */
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.panel-toggle h2 {
+  margin-bottom: 0;
+}
+
+.replay-panel .replay-body {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.replay-state {
+  margin-left: auto;
+  padding: 0 7px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.replay-state.is-done {
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.replay-traces {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.replay-traces li {
+  padding: 3px 8px;
+  margin-bottom: 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-options {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.replay-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.replay-options select {
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.replay-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.chip-button.replay-start:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.replay-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.replay-progress > div {
+  height: 100%;
+  background: var(--accent);
+}
+
 .hint {
   margin: 8px 0 0;
   color: var(--text-muted);
@@ -862,6 +961,7 @@ h3 {
 .kind-action { color: var(--kind-action); }
 .kind-scene { color: var(--kind-scene); }
 .kind-sim { color: var(--kind-sim); }
+.kind-other { color: var(--text-muted); }
 
 /* --- Toast -------------------------------------------------------------------------------- */
 

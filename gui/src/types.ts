@@ -77,6 +77,30 @@ export interface Scenario {
   actions: ActionDef[];
   scenes: SceneDef[];
   output: { position_interval_ms: number; sinks: SinkDef[] };
+  /** Liminal Desk traces this scenario replays when loaded (paths resolved); null: it simulates. */
+  replay: ReplaySettings | null;
+}
+
+// --- Trace replay (replay.rs) -------------------------------------------------------------------
+
+/** "payload": each payload as written. "envelope": with v, seq, sim_ms and kind in front. */
+export type ReplayFormat = "payload" | "envelope";
+
+export interface ReplaySettings {
+  traces: string[];
+  format: ReplayFormat;
+  positions: boolean;
+}
+
+export interface ReplayStatus {
+  traces: string[];
+  format: ReplayFormat;
+  positions: boolean;
+  /** Payloads sent so far, of `total`. */
+  sent: number;
+  total: number;
+  duration_ms: number;
+  done: boolean;
 }
 
 // --- Scenes (scene.rs) --------------------------------------------------------------------------
@@ -158,6 +182,8 @@ export interface WorldState {
   sensors: SensorView[];
   /** The playing scene, if any. */
   scene: SceneStatus | null;
+  /** Set while a trace is replayed (read-only: no manual control). */
+  replay: ReplayStatus | null;
 }
 
 // --- Output events (event.rs: SimEvent) — the consumer contract ---------------------------------
@@ -251,6 +277,18 @@ export type SimEvent = Envelope &
   );
 
 export type EventKind = SimEvent["kind"];
+
+/**
+ * One row of the log (bridge.rs: LogEntry): `data` is exactly what the sinks wrote, a SimEvent or a
+ * replayed trace payload; `kind` and `device_id` are what the log (and MQTT topics) go by.
+ */
+export interface LogEntry {
+  seq: number;
+  sim_ms: number;
+  kind: EventKind | null;
+  device_id: string | null;
+  data: Record<string, unknown>;
+}
 
 export const EVENT_KINDS: EventKind[] = [
   "position",

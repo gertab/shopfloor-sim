@@ -9,12 +9,15 @@ import { clampToReach } from "./geometry";
 import { useSimulation } from "./hooks/useSimulation";
 import type { Vec2 } from "./types";
 
+const READ_ONLY = "Replaying a trace: manual control is off";
+
 export default function App() {
   const sim = useSimulation();
   const { scenario, world, send, control } = sim;
   const [selectedMm, setSelectedMm] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus>(null);
   const [logCollapsed, setLogCollapsed] = useState(false);
+  const readOnly = world?.replay ? READ_ONLY : null;
 
   // A new scenario may not have the selected entities.
   useEffect(() => {
@@ -39,21 +42,22 @@ export default function App() {
         setFocus(null);
         return;
       }
+      if (readOnly) return;
       const target = clampToReach(point, selectedDef, scenario.floor.width_m, scenario.floor.height_m);
       void send({ type: "move_to", mm: selectedDef.id, target: { point: target } });
     },
-    [scenario, selectedDef, send],
+    [scenario, selectedDef, send, readOnly],
   );
 
   const onMachineClick = useCallback(
     (id: string) => {
-      if (selectedMm) {
+      if (selectedMm && !readOnly) {
         void send({ type: "move_to", mm: selectedMm, target: { machine: id } });
       } else {
         setFocus({ type: "machine", id });
       }
     },
-    [selectedMm, send],
+    [selectedMm, send, readOnly],
   );
 
   useEffect(() => {
@@ -78,7 +82,7 @@ export default function App() {
         scenario={scenario}
         world={world}
         loading={sim.loading}
-        selectedMmLabel={selectedDef?.label ?? null}
+        selectedMmLabel={readOnly ? null : (selectedDef?.label ?? null)}
         sinkStatus={sim.sinkStatus}
         onOpen={() => void sim.pickAndLoad()}
         onReload={() => void sim.load(scenario?.source_path ?? undefined)}
@@ -93,6 +97,7 @@ export default function App() {
               selectedMm={selectedMm}
               focus={focus}
               lastActions={sim.lastActions}
+              readOnly={readOnly !== null}
               onSelectMm={(id) => setSelectedMm((current) => (current === id ? null : id))}
               onFloorClick={onFloorClick}
               onMachineClick={onMachineClick}
@@ -109,6 +114,10 @@ export default function App() {
             selectedMm={selectedMm}
             focus={focus}
             lastActions={sim.lastActions}
+            readOnly={readOnly}
+            onPickTraces={sim.pickTraceFiles}
+            onStartReplay={(paths, choice) => void sim.startReplay(paths, choice)}
+            onStopReplay={() => void sim.stopReplay()}
             onSelectMm={(id) => setSelectedMm((current) => (current === id ? null : id))}
             onFocusSensor={(id) => setFocus({ type: "sensor", id })}
             send={(command) => void send(command)}

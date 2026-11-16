@@ -2,8 +2,9 @@
 //!
 //! Every table uses `deny_unknown_fields` so a typo is an error instead of a silently ignored key.
 
-use crate::event::{EVENT_KINDS, SimEvent};
+use crate::event::EVENT_KINDS;
 use crate::geometry::{Rect, Vec2};
+use crate::replay::Format;
 use crate::scene::{SceneDef, SceneSpec, resolve_scenes};
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,24 @@ pub struct ScenarioSpec {
     pub scenes: BTreeMap<String, SceneSpec>,
     #[serde(default)]
     pub output: OutputSpec,
+    /// Liminal Desk traces to replay on this layout (see `replay.rs`): what the app's Replay section
+    /// and `shopfloor replay` start with. The scenario still simulates until a replay is started.
+    pub replay: Option<ReplaySettings>,
+}
+
+/// `[replay]`: the traces to play on this layout, and how.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplaySettings {
+    /// Trace files, played side by side. Relative paths are resolved against the scenario file.
+    pub traces: Vec<PathBuf>,
+    /// Each payload as written (`payload`), or with `v`, `seq`, `sim_ms` and `kind` added
+    /// (`envelope`).
+    #[serde(default)]
+    pub format: Format,
+    /// Also report the positions of moving MMs.
+    #[serde(default)]
+    pub positions: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -210,12 +229,13 @@ pub struct MqttTopic {
 }
 
 impl MqttTopic {
-    pub fn matches(&self, event: &SimEvent) -> bool {
-        let kind_ok = self.kinds.is_empty() || self.kinds.iter().any(|kind| kind == event.kind());
+    /// Whether a message of this `kind` about `device_id` goes to this topic. A message whose kind
+    /// or device can't be told only matches topics without that filter.
+    pub fn matches(&self, kind: Option<&str>, device_id: Option<&str>) -> bool {
+        let kind_ok = self.kinds.is_empty()
+            || kind.is_some_and(|kind| self.kinds.iter().any(|known| known == kind));
         let entity_ok = self.entities.is_empty()
-            || event
-                .device_id()
-                .is_some_and(|device_id| self.entities.iter().any(|id| id == device_id));
+            || device_id.is_some_and(|device_id| self.entities.iter().any(|id| id == device_id));
         kind_ok && entity_ok
     }
 }
@@ -289,6 +309,8 @@ pub struct Scenario {
     pub actions: Vec<ActionDef>,
     pub scenes: Vec<SceneDef>,
     pub output: OutputSettings,
+    /// The default traces to replay on this layout, with paths resolved.
+    pub replay: Option<ReplaySettings>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -692,6 +714,23 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
         });
     }
 
+    let replay = spec.replay.map(|replay| {
+        if replay.traces.is_empty() {
+            errors.push("replay.traces must list at least one trace file".to_string());
+        }
+        ReplaySettings {
+            traces: replay
+                .traces
+                .iter()
+                .map(|path| match base_dir {
+                    Some(base) if path.is_relative() => base.join(path),
+                    _ => path.clone(),
+                })
+                .collect(),
+            ..replay
+        }
+    });
+
     let mut scenario = Scenario {
         name: spec.name,
         source_path: source_path.map(Path::to_path_buf),
@@ -706,6 +745,7 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
             position_interval_ms: output.position_interval_ms,
             sinks,
         },
+        replay,
     };
     // Scenes refer to everything above, so they are checked against the resolved scenario.
     scenario.scenes = resolve_scenes(&spec.scenes, &scenario, &mut errors);
@@ -1139,6 +1179,51 @@ entities = [\"mm1\"]
         let errors = errors_of(&text);
         assert!(errors.contains("unknown action 'fly' (known: pick)"), "{errors}");
         assert!(errors.contains("lists 'pick' twice"), "{errors}");
+    }
+
+    #[test]
+    fn parses_an_optional_replay_section() {
+        assert!(parse_scenario(MINIMAL, None).unwrap().replay.is_none());
+
+        let text = format!(
+            "{MINIMAL}\n[replay]\ntraces = [\"traces/a.json\", \"/abs/b.json\"]\nformat = \"envelope\"\n"
+        );
+        let scenario = parse_scenario(&text, Some(Path::new("/project/scenarios/cell.toml"))).unwrap();
+        assert_eq!(
+            scenario.replay,
+            Some(ReplaySettings {
+                traces: vec![
+                    PathBuf::from("/project/scenarios/traces/a.json"),
+                    PathBuf::from("/abs/b.json"),
+                ],
+                format: Format::Envelope,
+                positions: false,
+            })
+        );
+
+        let errors = errors_of(&format!("{MINIMAL}\n[replay]\ntraces = []\n"));
+        assert!(errors.contains("replay.traces must list at least one trace file"), "{errors}");
+        let error = format!("{:#}", parse_scenario(&format!("{MINIMAL}\n[replay]\ntraces = [\"a\"]\nformat = \"xml\"\n"), None).unwrap_err());
+        assert!(error.contains("unknown variant `xml`"), "{error}");
+    }
+
+    /// Every bundled scenario still loads, including those in their own folder.
+    #[test]
+    fn the_bundled_scenarios_load() {
+        fn load_all(dir: &Path, count: &mut usize) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    load_all(&path, count);
+                } else if path.extension().is_some_and(|ext| ext == "toml") {
+                    load_scenario(&path).unwrap_or_else(|error| panic!("{}: {error:#}", path.display()));
+                    *count += 1;
+                }
+            }
+        }
+        let mut count = 0;
+        load_all(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../scenarios"), &mut count);
+        assert!(count >= 7, "found {count} scenarios");
     }
 
     #[test]

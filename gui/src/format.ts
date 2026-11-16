@@ -1,4 +1,4 @@
-import type { EventKind, Repeat, Scenario, SimEvent } from "./types";
+import type { EventKind, LogEntry, Repeat, Scenario } from "./types";
 
 export const KIND_LABELS: Record<EventKind, string> = {
   position: "position",
@@ -55,45 +55,82 @@ export function machineLabel(scenario: Scenario | null, id: string | null): stri
   return scenario?.machines.find((machine) => machine.id === id)?.label ?? id;
 }
 
-function describePlace(scenario: Scenario | null, point: { x: number; y: number }, at: string | null) {
+type Data = Record<string, unknown>;
+
+const num = (data: Data, key: string): number | null => (typeof data[key] === "number" ? (data[key] as number) : null);
+const str = (data: Data, key: string): string | null => (typeof data[key] === "string" ? (data[key] as string) : null);
+
+function pointOf(value: unknown): { x: number; y: number } | null {
+  const point = value as { x?: unknown; y?: unknown } | null;
+  return point && typeof point.x === "number" && typeof point.y === "number" ? { x: point.x, y: point.y } : null;
+}
+
+/** "Bonder (2.5, 4.8)", or just the machine or the point when only one is known. */
+function describePlace(scenario: Scenario | null, at: string | null, point: { x: number; y: number } | null): string {
   const label = machineLabel(scenario, at);
-  return label ? `${label} ${formatPoint(point.x, point.y)}` : formatPoint(point.x, point.y);
+  const coords = point ? formatPoint(point.x, point.y) : null;
+  return [label, coords].filter(Boolean).join(" ") || "?";
 }
 
-/** The machine, MM or sensor an event is about (for filtering). */
-export function eventDeviceId(event: SimEvent): string | null {
-  return event.kind === "sim" || event.kind === "scene" ? null : event.device_id;
-}
-
-/** One-line human summary of an event. */
-export function describeEvent(event: SimEvent, scenario: Scenario | null): string {
-  switch (event.kind) {
-    case "position":
-      return `${formatPoint(event.x, event.y)}  heading ${((event.heading_rad * 180) / Math.PI).toFixed(0)}°  ${event.speed_mps.toFixed(2)} m/s`;
-    case "move_command":
+/**
+ * One-line human summary of a log entry. It reads `data` loosely, since it may be a simulator event,
+ * a replayed trace payload (fewer keys) or one in an envelope.
+ */
+export function describeEntry(entry: LogEntry, scenario: Scenario | null): string {
+  const data = entry.data;
+  const commandId = num(data, "command_id");
+  const ref = commandId !== null ? `#${commandId} ` : "";
+  const origin = str(data, "origin");
+  const by = origin ? `  [${origin}]` : "";
+  const here = pointOf(data);
+  switch (entry.kind) {
+    case "position": {
+      const heading = num(data, "heading_rad") ?? 0;
+      return `${describePlace(scenario, null, here)}  heading ${((heading * 180) / Math.PI).toFixed(0)}°  ${(num(data, "speed_mps") ?? 0).toFixed(2)} m/s`;
+    }
+    case "move_command": {
+      const distance = num(data, "distance_m");
+      const eta = num(data, "eta_ms");
+      const replaces = num(data, "replaces");
       return (
-        `#${event.command_id} ${describePlace(scenario, event.from, event.source)} -> ${describePlace(scenario, event.to, event.destination)}` +
-        `  ${event.distance_m.toFixed(1)} m, ETA ${(event.eta_ms / 1000).toFixed(1)} s` +
-        (event.replaces !== null ? `  (replaces #${event.replaces})` : "") +
-        `  [${event.origin}]`
+        `${ref}${describePlace(scenario, str(data, "source"), pointOf(data.from))} -> ` +
+        describePlace(scenario, str(data, "destination"), pointOf(data.to)) +
+        (distance !== null && eta !== null ? `  ${distance.toFixed(1)} m, ETA ${(eta / 1000).toFixed(1)} s` : "") +
+        (replaces !== null ? `  (replaces #${replaces})` : "") +
+        by
       );
+    }
     case "arrived":
-      return `#${event.command_id} at ${describePlace(scenario, event, event.at)}`;
+      return `${ref}at ${describePlace(scenario, str(data, "at"), here)}`;
     case "stopped":
-      return `#${event.command_id} stopped at ${describePlace(scenario, event, event.at)}  [${event.origin}]`;
+      return `${ref}stopped at ${describePlace(scenario, str(data, "at"), here)}${by}`;
     case "undock":
-      return `#${event.command_id} left ${describePlace(scenario, event, event.target)}`;
+      return `${ref}left ${describePlace(scenario, str(data, "target"), here)}`;
     case "dock":
-      return `#${event.command_id} docked at ${describePlace(scenario, event, event.target)}`;
-    case "sensor":
-      return `${event.sensor} = ${formatValue(event.value)} ${event.unit}  @ ${formatPoint(event.x, event.y)}`;
+      return `${ref}docked at ${describePlace(scenario, str(data, "target"), here)}`;
+    case "sensor": {
+      const name = str(data, "sensor") ?? `${entry.device_id ?? "?"} ${str(data, "type") ?? ""}`;
+      const target = str(data, "target");
+      return (
+        `${name} = ${formatValue(num(data, "value"))} ${str(data, "unit") ?? ""}` +
+        (here ? `  @ ${formatPoint(here.x, here.y)}` : "") +
+        (target ? `  -> ${machineLabel(scenario, target)}` : "")
+      );
+    }
     case "sensor_set":
-      return `${event.sensor} setpoint ${formatValue(event.previous_setpoint)} -> ${formatValue(event.setpoint)}, noise σ ${formatValue(event.noise_std)}${event.paused ? ", paused" : ""}  [${event.origin}]`;
-    case "action":
-      return `#${event.command_id} ${event.event}${event.object ? ` ${event.object}` : ""} at ${describePlace(scenario, event, event.at)}  [${event.origin}]`;
-    case "scene":
-      return `${event.scene} ${event.state} (iteration ${event.iteration})${event.error ? `: ${event.error}` : ""}`;
+      return `${str(data, "sensor")} setpoint ${formatValue(num(data, "previous_setpoint"))} -> ${formatValue(num(data, "setpoint"))}, noise σ ${formatValue(num(data, "noise_std"))}${data.paused ? ", paused" : ""}${by}`;
+    case "action": {
+      const object = str(data, "object");
+      const at = str(data, "at");
+      return `${ref}${str(data, "event") ?? "?"}${object ? ` ${object}` : ""}${at || here ? ` at ${describePlace(scenario, at, here)}` : ""}${by}`;
+    }
+    case "scene": {
+      const error = str(data, "error");
+      return `${str(data, "scene")} ${str(data, "state")} (iteration ${num(data, "iteration")})${error ? `: ${error}` : ""}`;
+    }
     case "sim":
-      return `${event.state} · ${event.scenario}`;
+      return `${str(data, "state")} · ${str(data, "scenario")}`;
+    default:
+      return JSON.stringify(data);
   }
 }

@@ -1,19 +1,24 @@
-//! `shopfloor`: run a scenario (and optionally one of its scenes) without the GUI.
+//! `shopfloor`: run a scenario (and optionally one of its scenes) without the GUI, or replay
+//! Liminal Desk traces on its layout.
 //!
 //! ```text
 //! shopfloor check scenarios/sample-floor.toml
 //! shopfloor run scenarios/sample-floor.toml --scene production --duration 300
 //! shopfloor run scenarios/sample-floor.toml --scene production --fast --duration 600 --jsonl out.jsonl
+//! shopfloor replay scenarios/die-processing/die-processing.toml
+//! shopfloor replay scenarios/die-processing/die-processing.toml a.json b.json --format envelope --fast --jsonl out.jsonl
 //! ```
 //!
 //! Events go to the scenario's `[output.sinks]` (plus `--jsonl`); logs go to stderr.
 
 use anyhow::{Context, bail};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use shopfloor_core::command::Control;
 use shopfloor_core::headless::{FastRun, Outcome, run_fast, scene_outcome};
-use shopfloor_core::runtime::now_ms;
+use shopfloor_core::replay::{self, Format, Replay, ReplayOptions};
+use shopfloor_core::runtime::{ReplayRuntime, now_ms};
 use shopfloor_core::scenario::{SinkDef, SinkKind};
+use shopfloor_core::trace::{Trace, load_trace};
 use shopfloor_core::scene::Repeat;
 use shopfloor_core::sinks::{EventSink, SinkMonitor, build_sink};
 use shopfloor_core::{Scenario, SimRuntime, load_scenario};
@@ -33,8 +38,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Validate a scenario file and list what it contains.
-    Check { scenario: PathBuf },
+    /// Validate a scenario file and list what it contains. Also checks Liminal Desk traces against
+    /// it: the scenario's `[replay]` traces, or the ones given.
+    Check {
+        scenario: PathBuf,
+        /// A trace to check (repeat for several). Default: the scenario's `[replay]` traces.
+        #[arg(long = "trace", value_name = "FILE")]
+        traces: Vec<PathBuf>,
+    },
     /// Run a scenario, optionally playing one of its scenes, and write events to its sinks.
     Run {
         scenario: PathBuf,
@@ -56,6 +67,47 @@ enum Command {
         #[arg(long, value_name = "ADDR")]
         tcp: Option<String>,
     },
+    /// Replay Liminal Desk traces on a scenario's layout: their payloads go to its sinks at the
+    /// times their delays give, and nothing else (no simulation).
+    Replay {
+        scenario: PathBuf,
+        /// Trace files, played side by side. Default: the scenario's `[replay] traces`.
+        traces: Vec<PathBuf>,
+        /// `payload`: each payload as written. `envelope`: with `v`, `seq`, `sim_ms` and `kind` in
+        /// front. Default: the scenario's `[replay] format`, else `payload`.
+        #[arg(long, value_enum)]
+        format: Option<FormatArg>,
+        /// Also report the positions of moving MMs.
+        #[arg(long, overrides_with = "no_positions")]
+        positions: bool,
+        /// Don't report positions, even if the scenario's `[replay]` says to.
+        #[arg(long, overrides_with = "positions")]
+        no_positions: bool,
+        /// Write everything at once instead of in real time. TCP and MQTT outputs are skipped.
+        #[arg(long)]
+        fast: bool,
+        /// Also write every message to this JSONL file (overwritten).
+        #[arg(long, value_name = "PATH")]
+        jsonl: Option<PathBuf>,
+        /// Also stream every message over TCP on this address. Ignored with --fast.
+        #[arg(long, value_name = "ADDR")]
+        tcp: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum FormatArg {
+    Payload,
+    Envelope,
+}
+
+impl From<FormatArg> for Format {
+    fn from(format: FormatArg) -> Self {
+        match format {
+            FormatArg::Payload => Format::Payload,
+            FormatArg::Envelope => Format::Envelope,
+        }
+    }
 }
 
 /// How a run ended.
@@ -73,7 +125,7 @@ fn main() -> ExitCode {
         .init();
 
     let result = match Cli::parse().command {
-        Command::Check { scenario } => check(&scenario),
+        Command::Check { scenario, traces } => check(&scenario, traces),
         Command::Run {
             scenario,
             scene,
@@ -82,6 +134,23 @@ fn main() -> ExitCode {
             jsonl,
             tcp,
         } => run(&scenario, scene, duration, fast, jsonl, tcp),
+        Command::Replay {
+            scenario,
+            traces,
+            format,
+            positions,
+            no_positions,
+            fast,
+            jsonl,
+            tcp,
+        } => {
+            let positions = match (positions, no_positions) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+            replay(&scenario, traces, format.map(Format::from), positions, fast, jsonl, tcp)
+        }
     };
     match result {
         Ok(code) => code,
@@ -92,7 +161,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn check(path: &Path) -> anyhow::Result<ExitCode> {
+fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
     let scenario = load_scenario(path)?;
     println!("Scenario '{}' ({}): OK", scenario.name, path.display());
     println!(
@@ -148,6 +217,49 @@ fn check(path: &Path) -> anyhow::Result<ExitCode> {
     }
     let sinks: Vec<String> = scenario.output.sinks.iter().map(describe_sink).collect();
     println!("Sinks: {}", list_or_none(&sinks));
+
+    let settings = scenario.replay.clone();
+    let paths = if traces.is_empty() {
+        settings.as_ref().map(|settings| settings.traces.clone()).unwrap_or_default()
+    } else {
+        traces
+    };
+    if paths.is_empty() {
+        return Ok(ExitCode::SUCCESS);
+    }
+    let traces = paths
+        .iter()
+        .map(|path| load_trace(path))
+        .collect::<anyhow::Result<Vec<Trace>>>()?;
+    println!("Traces ({}):", traces.len());
+    for trace in &traces {
+        println!(
+            "  {:<24} {} steps, {} payloads, {:.1} s",
+            trace.name,
+            trace.steps.len(),
+            trace.sends(),
+            trace.duration_ms() as f64 / 1000.0
+        );
+    }
+    let options = ReplayOptions {
+        format: settings.map(|settings| settings.format).unwrap_or_default(),
+        positions: false,
+    };
+    let (replay, findings) = Replay::new(Arc::new(scenario), traces, options, now_ms())?;
+    let status = replay.state().replay.expect("a replay reports its status");
+    println!(
+        "Replay: {} payloads over {:.1} s · {}",
+        status.total,
+        status.duration_ms as f64 / 1000.0,
+        match findings.len() {
+            0 => "no warnings".to_string(),
+            1 => "1 warning:".to_string(),
+            n => format!("{n} warnings:"),
+        }
+    );
+    for finding in &findings {
+        println!("  - {finding}");
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -160,24 +272,7 @@ fn run(
     tcp: Option<String>,
 ) -> anyhow::Result<ExitCode> {
     let mut scenario = load_scenario(path)?;
-    if let Some(bind) = tcp {
-        scenario.output.sinks.push(SinkDef {
-            name: "cli-tcp".to_string(),
-            kind: SinkKind::Tcp { bind },
-        });
-    }
-    if let Some(path) = jsonl {
-        scenario.output.sinks.push(SinkDef {
-            name: "cli-jsonl".to_string(),
-            kind: SinkKind::Jsonl {
-                path,
-                append: false,
-            },
-        });
-    }
-    if scenario.output.sinks.is_empty() {
-        tracing::warn!("no [output.sinks] in the scenario and no --jsonl: events go nowhere");
-    }
+    add_cli_sinks(&mut scenario, jsonl, tcp);
     if let Some(id) = &scene
         && scenario.scene_index(id).is_none()
     {
@@ -194,17 +289,7 @@ fn run(
     let scenario = Arc::new(scenario);
 
     let end = if fast {
-        // Streaming minutes of data to a consumer in a fraction of a second isn't useful, so TCP
-        // and MQTT sinks only run in real time.
-        let monitor = SinkMonitor::default();
-        let mut sinks: Vec<Box<dyn EventSink>> = Vec::new();
-        for def in &scenario.output.sinks {
-            if def.kind.is_live() {
-                tracing::info!("--fast: skipping live sink '{}'", def.name);
-                continue;
-            }
-            sinks.push(build_sink(def, &monitor)?);
-        }
+        let mut sinks = fast_sinks(&scenario)?;
         let run = FastRun {
             scene: scene.clone(),
             max_sim_ms,
@@ -242,6 +327,125 @@ fn run(
             ExitCode::SUCCESS
         }
     })
+}
+
+/// `--jsonl` and `--tcp` add sinks to the scenario's.
+fn add_cli_sinks(scenario: &mut Scenario, jsonl: Option<PathBuf>, tcp: Option<String>) {
+    if let Some(bind) = tcp {
+        scenario.output.sinks.push(SinkDef {
+            name: "cli-tcp".to_string(),
+            kind: SinkKind::Tcp { bind },
+        });
+    }
+    if let Some(path) = jsonl {
+        scenario.output.sinks.push(SinkDef {
+            name: "cli-jsonl".to_string(),
+            kind: SinkKind::Jsonl {
+                path,
+                append: false,
+            },
+        });
+    }
+    if scenario.output.sinks.is_empty() {
+        tracing::warn!("no [output.sinks] in the scenario and no --jsonl: events go nowhere");
+    }
+}
+
+/// The sinks of a `--fast` run. Streaming minutes of data to a consumer in a fraction of a second
+/// isn't useful, so TCP and MQTT sinks only run in real time.
+fn fast_sinks(scenario: &Scenario) -> anyhow::Result<Vec<Box<dyn EventSink>>> {
+    let monitor = SinkMonitor::default();
+    let mut sinks: Vec<Box<dyn EventSink>> = Vec::new();
+    for def in &scenario.output.sinks {
+        if def.kind.is_live() {
+            tracing::info!("--fast: skipping live sink '{}'", def.name);
+            continue;
+        }
+        sinks.push(build_sink(def, &monitor)?);
+    }
+    Ok(sinks)
+}
+
+fn replay(
+    path: &Path,
+    traces: Vec<PathBuf>,
+    format: Option<Format>,
+    positions: Option<bool>,
+    fast: bool,
+    jsonl: Option<PathBuf>,
+    tcp: Option<String>,
+) -> anyhow::Result<ExitCode> {
+    let mut scenario = load_scenario(path)?;
+    add_cli_sinks(&mut scenario, jsonl, tcp);
+    let settings = scenario.replay.clone();
+    let traces = match (traces.is_empty(), &settings) {
+        (false, _) => traces,
+        (true, Some(settings)) => settings.traces.clone(),
+        (true, None) => bail!(
+            "nothing to replay: give trace files, or add a [replay] section to {}",
+            path.display()
+        ),
+    };
+    let options = ReplayOptions {
+        format: format
+            .or(settings.as_ref().map(|settings| settings.format))
+            .unwrap_or_default(),
+        positions: positions
+            .or(settings.as_ref().map(|settings| settings.positions))
+            .unwrap_or(false),
+    };
+    let (mut replay, findings) = Replay::from_files(Arc::new(scenario), &traces, options, now_ms())?;
+    for finding in &findings {
+        tracing::warn!("{finding}");
+    }
+    let status = replay.state().replay.expect("a replay reports its status");
+    tracing::info!(
+        "replaying {} payloads over {:.1} s ({:?} format{})",
+        status.total,
+        status.duration_ms as f64 / 1000.0,
+        options.format,
+        if options.positions { ", with positions" } else { "" }
+    );
+
+    if fast {
+        let mut sinks = fast_sinks(replay.scenario())?;
+        let written = replay::run_fast(&mut replay, &mut sinks)?;
+        tracing::info!("wrote {written} messages");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let finished = tokio::runtime::Runtime::new()
+        .context("failed to start the async runtime")?
+        .block_on(replay_realtime(replay))?;
+    tracing::info!("{}", if finished { "replay finished" } else { "interrupted" });
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Plays the replay in real time until it ends (`true`) or Ctrl+C (`false`).
+async fn replay_realtime(replay: Replay) -> anyhow::Result<bool> {
+    let runtime = ReplayRuntime::spawn(replay)?;
+    let mut state = runtime.watch_state();
+    let interrupted = tokio::signal::ctrl_c();
+    tokio::pin!(interrupted);
+    let finished = loop {
+        if state
+            .borrow_and_update()
+            .replay
+            .as_ref()
+            .is_some_and(|status| status.done)
+        {
+            break true;
+        }
+        tokio::select! {
+            _ = &mut interrupted => break false,
+            changed = state.changed() => {
+                if changed.is_err() {
+                    bail!("the replay stopped unexpectedly");
+                }
+            }
+        }
+    };
+    runtime.shutdown().await;
+    Ok(finished)
 }
 
 /// Real time: the same runtime the GUI uses. Ends on scene end, `--duration`, or Ctrl+C.

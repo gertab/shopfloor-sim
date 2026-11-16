@@ -57,6 +57,9 @@ cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production 
 Without `--scene` or `--duration`, a real-time run continues until Ctrl+C. The binary itself is
 `target/debug/shopfloor` (or `cargo build --release --bin shopfloor`).
 
+`shopfloor replay` plays Liminal Desk traces instead of simulating, and `shopfloor check SCENARIO --trace FILE` checks
+them. See [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
+
 ### Tests and checks
 
 ```bash
@@ -125,6 +128,11 @@ React UI ── invoke("send_command", {move_to ...}) ──► SimRuntime (toki
   instead of slowing the simulation.
 - **Headless runs** use the same `SimRuntime` in real time. `--fast` runs use
   [core/src/headless.rs](core/src/headless.rs), which steps the engine in a loop and writes straight to the sinks.
+- **Trace replay** ([core/src/replay.rs](core/src/replay.rs)) takes the engine's place.
+  - A `Replay` plays traces parsed by [core/src/trace.rs](core/src/trace.rs).
+  - `ReplayRuntime` runs it in real time. It takes no commands: only pause, resume and reset.
+  - Sinks take `Message`s: JSON plus the `kind` and `device_id` that MQTT topics route on. That's how a replayed
+    payload reaches the same sinks as an event.
 
 ## Scenario files
 
@@ -186,6 +194,7 @@ scenarios use the same file format and the same simulator:
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | TCP |
+| [die-processing/die-processing.toml](scenarios/die-processing/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two Liminal Desk traces to replay on it | 10×9 m | None (its traces, in a `[replay]` section) | TCP, MQTT (topics under `die-cell/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size. Machines and MMs are drawn at their real size, and text and markers scale with the floor so
@@ -444,6 +453,83 @@ Notes for consumers:
 - `sensor_set`, `move_command` and `action` are ground truth: what the operator (or a script) did and when. That's
   useful for labelling, and it means a recording contains its own script.
 
+## Replaying Liminal Desk traces
+
+[Liminal Desk](https://github.com/duncanatt/liminal-desk) traces are JSON files of `send` and `delay` steps. The
+simulator can play them instead of simulating. Each payload goes to the scenario's outputs at the time the trace's
+delays give, exactly as written. Nothing else is sent: no physics, no periodic sensor readings and, unless you ask, no
+position reports.
+
+```bash
+cargo run --bin shopfloor -- replay scenarios/die-processing/die-processing.toml   # its [replay] traces, real time
+cargo run --bin shopfloor -- replay scenarios/die-processing/die-processing.toml a.json b.json \
+    --format envelope --positions --fast --jsonl recordings/replay.jsonl          # all at once, to a file
+cargo run --bin shopfloor -- check scenarios/die-processing/die-processing.toml    # check its traces, no replay
+```
+
+The scenario provides the layout and the outputs. It can name its traces in a `[replay]` section. They're what the app's
+Replay section starts with, and what `shopfloor replay` plays when you give it no trace files. The scenario still
+simulates until you start a replay. A scenario can keep its traces next to it in its own folder, as
+[scenarios/die-processing/](scenarios/die-processing/) does:
+
+```toml
+[replay]
+traces = ["machine_events.json", "sensor_events.json"]   # relative to this file
+format = "payload"     # or "envelope"
+positions = false
+```
+
+| Option | Meaning |
+|---|---|
+| `TRACE...` | Trace files to play side by side. They replace the scenario's `[replay] traces`. |
+| `--format payload` | The default: each payload exactly as Liminal Desk sends it (same keys, order and number literals), on one line. |
+| `--format envelope` | The payload with `"v":2,"seq":N,"sim_ms":T,"kind":K` in front, plus `timestamp_ms` if it has none. |
+| `--positions` / `--no-positions` | Also report the positions of moving MMs, every `position_interval_ms`. Off by default. |
+| `--fast`, `--jsonl PATH`, `--tcp ADDR` | As for `run`. |
+
+How a replay works:
+- **Timing.**
+  - Each trace's steps happen when its delays say.
+  - Several traces play side by side, merged on their delays. Ties go in the order the traces were given.
+  - The payloads' own `timestamp_ms` values are sent unchanged.
+- **Routing.**
+  - A payload counts as a simulator event kind: `event: "move"` is a `move_command`, `"dock"`/`"undock"` are
+    themselves, any other `event` is an `action`, and a `type` without an `event` is a `sensor`.
+  - Its `device_id` is its device.
+  - MQTT topics filter on these two, so `kinds = ["sensor"]` gets the sensor payloads, without adding anything to them.
+- **The picture.**
+  - The MMs follow their `undock`, `move` and `dock` events on the scenario's layout:
+    - an `undock` backs the MM 1 m away from the dock, leaning 30° to one side, so two MMs waiting at one machine stand
+      apart;
+    - a `move` reaches the destination at the MM's next event.
+  - Sensor payloads update the sensor with the same `device_id` (its host) and `type` (its kind).
+- **Read-only.**
+  - No moves, actions, sensor changes or scenes are possible: the app disables them, and the backend refuses them.
+  - Pause works, and Reset starts the replay again.
+- **Position reports** (`--positions`).
+  - They are sampled from those same movements.
+  - In the payload format: `{"device_id","x","y","heading_rad","speed_mps","timestamp_ms"}`. In the envelope format:
+    the simulator's own `position` event.
+
+In the app, the **Replay** section at the top of the right-hand panel:
+- It's open when the scenario has a `[replay]` section, and folded away otherwise.
+- It lists the traces to play. **Choose traces…** picks others, opening in the scenario's folder.
+- Its selector chooses `payload` or `envelope`, and its checkbox turns position reports on.
+- **Start replay** starts. During the replay the section shows progress, and **Stop replay** goes back to simulating
+  the same layout. The toolbar's Pause and Reset act on the replay.
+- The log shows exactly what the outputs send.
+
+Checks:
+- **Errors stop a replay.** These are Liminal Desk's own rules:
+  - exactly `{"version": 1, "steps": [...]}`, with at least one step;
+  - each step exactly `{"type": "send", "payload": ...}` or `{"type": "delay", "duration_ms": N}`, with N a
+    non-negative integer.
+  - Errors name the file, the step and its line.
+- **Warnings** say where a trace doesn't fit the scenario. They're printed before a replay and shown in the app:
+  - unknown devices, machines, sensors or actions, and a different unit from the scenario's;
+  - a `timestamp_ms` that disagrees with the delays, or traces that start at different times;
+  - events that don't follow on, e.g. a dock at a machine other than the move's destination, or a pick while not docked.
+
 ## Example: Liminal
 
 [Liminal](https://github.com/gertab/liminal) is a stream processor configured in TOML. It can consume the simulator's
@@ -525,6 +611,8 @@ How it behaves:
   1. Add a `StepSpec` variant and resolve it in `resolve_step` ([core/src/scene.rs](core/src/scene.rs)).
   2. If it is a new kind of wait, add a `Wait` variant and check it in `Engine::run_scene`.
 - **Obstacle avoidance:** implement `PathPlanner` and pass it with `Engine::with_planner`.
+- **Another trace format:** parse it into `trace::Trace` (sends and delays). The replay, checks and animation then
+  work as they are.
 
 ## Todos
 

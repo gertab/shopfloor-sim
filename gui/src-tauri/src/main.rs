@@ -3,7 +3,7 @@ mod commands;
 
 use commands::{
     SimHost, control_sim, default_scenario_path, get_scenario, get_sink_status, get_state,
-    load_scenario, pick_scenario_file, send_command,
+    load_scenario, pick_scenario_file, pick_trace_files, send_command, start_replay, stop_replay,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -23,6 +23,9 @@ fn main() {
             default_scenario_path,
             load_scenario,
             pick_scenario_file,
+            pick_trace_files,
+            start_replay,
+            stop_replay,
             get_scenario,
             get_state,
             get_sink_status,

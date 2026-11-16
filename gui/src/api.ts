@@ -5,6 +5,11 @@ import type { Control, Scenario, SimCommand, WorldState } from "./types";
 export const api = {
   loadScenario: (path?: string) => invoke<Scenario>("load_scenario", { path: path ?? null }),
   pickScenarioFile: () => invoke<string | null>("pick_scenario_file"),
+  pickTraceFiles: () => invoke<string[] | null>("pick_trace_files"),
+  /** Replays traces on the loaded layout; returns what the checks found. */
+  startReplay: (paths: string[], envelope: boolean, positions: boolean) =>
+    invoke<string[]>("start_replay", { paths, envelope, positions }),
+  stopReplay: () => invoke<void>("stop_replay"),
   getState: () => invoke<WorldState | null>("get_state"),
   sendCommand: (command: SimCommand) => invoke<void>("send_command", { command }),
   control: (control: Control) => invoke<void>("control_sim", { control }),

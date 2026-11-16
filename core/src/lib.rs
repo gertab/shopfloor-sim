@@ -14,10 +14,12 @@ pub mod event;
 pub mod geometry;
 pub mod headless;
 pub mod motion;
+pub mod replay;
 pub mod runtime;
 pub mod scenario;
 pub mod scene;
 pub mod sinks;
+pub mod trace;
 
 pub use command::{CommandEnvelope, Control, Origin, SimCommand, Target};
 pub use engine::{Engine, WorldState};

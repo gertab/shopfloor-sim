@@ -1,0 +1,418 @@
+use super::*;
+use crate::scenario::parse_scenario;
+use crate::trace::parse_trace;
+use std::sync::Mutex;
+
+const SCENARIO: &str = r#"
+    name = "Replay test"
+
+    [floor]
+    width_m = 12.0
+    height_m = 8.0
+
+    [machines.stocker]
+    position = [6.0, 6.0]
+    size = [2.0, 1.0]          # dock (6.0, 5.0)
+
+    [machines.bonder]
+    position = [2.0, 6.0]
+    size = [2.0, 1.0]          # dock (2.0, 5.0)
+
+    [mobile_manipulators.mm-1]
+    start_at = "stocker"
+    max_speed_mps = 1.0
+
+    [mobile_manipulators.mm-1.sensors.vibration]
+    unit = "m/s^2"
+    default = 0.0
+    range = [0.0, 5.0]
+
+    [mobile_manipulators.mm-1.sensors.lidar]
+    unit = "m"
+    default = 0.0
+    range = [0.0, 10.0]
+
+    [mobile_manipulators.mm-2]
+    start = [10.0, 2.0]
+
+    [actions.pick]
+    requires_machine = true
+
+    [actions.place]
+    requires_machine = true
+"#;
+
+/// mm-1 picks at the stocker, carries the dies to the bonder and places them there.
+const EVENTS: &str = r#"{
+  "version": 1,
+  "steps": [
+    {"type": "send", "payload": {"device_id": "mm-1", "event": "pick", "object": "dies", "timestamp_ms": 1000000}},
+    {"type": "delay", "duration_ms": 1000},
+    {"type": "send", "payload": {"device_id": "mm-1", "event": "undock", "target": "stocker", "timestamp_ms": 1001000}},
+    {"type": "delay", "duration_ms": 1000},
+    {"type": "send", "payload": {"device_id": "mm-1", "event": "move", "source": "stocker", "destination": "bonder", "timestamp_ms": 1002000}},
+    {"type": "delay", "duration_ms": 2000},
+    {"type": "send", "payload": {"device_id": "mm-1", "event": "dock", "target": "bonder", "timestamp_ms": 1004000}},
+    {"type": "delay", "duration_ms": 1000},
+    {"type": "send", "payload": {"device_id": "mm-1", "event": "place", "object": "dies", "timestamp_ms": 1005000}}
+  ]
+}"#;
+
+const SENSORS: &str = r#"{
+  "version": 1,
+  "steps": [
+    {"type": "send", "payload": {
+        "type": "vibration", "device_id": "mm-1", "value": 1.250, "unit": "m/s^2", "timestamp_ms": 1000000
+    }},
+    {"type": "delay", "duration_ms": 2500},
+    {"type": "send", "payload": {"type": "lidar", "device_id": "mm-1", "value": 0.5, "unit": "m", "target": "bonder", "timestamp_ms": 1002500}}
+  ]
+}"#;
+
+const START_TS: u64 = 1_761_730_000_000;
+
+fn scenario() -> Arc<Scenario> {
+    Arc::new(parse_scenario(SCENARIO, None).unwrap())
+}
+
+fn traces(texts: &[(&str, &str)]) -> Vec<Trace> {
+    texts.iter().map(|(name, text)| parse_trace(name, text).unwrap()).collect()
+}
+
+fn replay(texts: &[(&str, &str)], options: ReplayOptions) -> (Replay, Vec<Finding>) {
+    Replay::new(scenario(), traces(texts), options, START_TS).unwrap()
+}
+
+fn sample_replay(options: ReplayOptions) -> Replay {
+    let (replay, findings) = replay(&[("events.json", EVENTS), ("sensors.json", SENSORS)], options);
+    assert_eq!(findings, vec![], "the sample traces fit the scenario");
+    replay
+}
+
+struct MemorySink(Arc<Mutex<Vec<Message>>>);
+
+impl EventSink for MemorySink {
+    fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
+        self.0.lock().unwrap().extend_from_slice(messages);
+        Ok(())
+    }
+}
+
+fn play(replay: &mut Replay) -> Vec<Message> {
+    let messages = Arc::new(Mutex::new(Vec::new()));
+    let mut sinks: Vec<Box<dyn EventSink>> = vec![Box::new(MemorySink(Arc::clone(&messages)))];
+    let written = run_fast(replay, &mut sinks).unwrap();
+    let messages = messages.lock().unwrap().clone();
+    assert_eq!(written as usize, messages.len());
+    messages
+}
+
+#[test]
+fn the_payload_format_sends_exactly_the_payloads_at_their_times() {
+    let mut replay = sample_replay(ReplayOptions::default());
+    let messages = play(&mut replay);
+    let sent: Vec<(u64, &str)> = messages.iter().map(|m| (m.sim_ms, m.json.as_str())).collect();
+    assert_eq!(
+        sent,
+        vec![
+            (0, r#"{"device_id":"mm-1","event":"pick","object":"dies","timestamp_ms":1000000}"#),
+            (0, r#"{"type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#),
+            (1000, r#"{"device_id":"mm-1","event":"undock","target":"stocker","timestamp_ms":1001000}"#),
+            (2000, r#"{"device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#),
+            (2500, r#"{"type":"lidar","device_id":"mm-1","value":0.5,"unit":"m","target":"bonder","timestamp_ms":1002500}"#),
+            (4000, r#"{"device_id":"mm-1","event":"dock","target":"bonder","timestamp_ms":1004000}"#),
+            (5000, r#"{"device_id":"mm-1","event":"place","object":"dies","timestamp_ms":1005000}"#),
+        ]
+    );
+    let routing: Vec<(Option<&str>, Option<&str>)> =
+        messages.iter().map(|m| (m.kind, m.device_id.as_deref())).collect();
+    assert_eq!(
+        routing,
+        vec![
+            (Some("action"), Some("mm-1")),
+            (Some("sensor"), Some("mm-1")),
+            (Some("undock"), Some("mm-1")),
+            (Some("move_command"), Some("mm-1")),
+            (Some("sensor"), Some("mm-1")),
+            (Some("dock"), Some("mm-1")),
+            (Some("action"), Some("mm-1")),
+        ]
+    );
+    assert_eq!(messages.iter().map(|m| m.seq).collect::<Vec<_>>(), (1..=7).collect::<Vec<_>>());
+    assert!(replay.is_done());
+    assert_eq!(replay.state().sim_ms, 5000, "time stops at the end");
+}
+
+#[test]
+fn the_envelope_format_adds_the_simulator_fields_in_front() {
+    let mut replay = sample_replay(ReplayOptions {
+        format: Format::Envelope,
+        positions: false,
+    });
+    let messages = play(&mut replay);
+    assert_eq!(
+        messages[1].json,
+        r#"{"v":2,"seq":2,"sim_ms":0,"kind":"sensor","type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#
+    );
+    assert_eq!(
+        messages[3].json,
+        r#"{"v":2,"seq":4,"sim_ms":2000,"kind":"move_command","device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#
+    );
+}
+
+#[test]
+fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
+    assert_eq!(
+        envelope(3, 1500, Some("action"), Some(42), r#"{"device_id":"mm-1","event":"pick"}"#),
+        r#"{"v":2,"seq":3,"sim_ms":1500,"kind":"action","timestamp_ms":42,"device_id":"mm-1","event":"pick"}"#
+    );
+    assert_eq!(envelope(1, 0, None, None, "{}"), r#"{"v":2,"seq":1,"sim_ms":0,"kind":null}"#);
+
+    let trace = r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 200}, {"type": "send", "payload": {"device_id": "mm-1", "event": "pick"}}]}"#;
+    let (mut replay, _) = replay(&[("t.json", trace)], ReplayOptions { format: Format::Envelope, positions: false });
+    let messages = play(&mut replay);
+    let expected = format!(
+        r#"{{"v":2,"seq":1,"sim_ms":200,"kind":"action","timestamp_ms":{},"device_id":"mm-1","event":"pick"}}"#,
+        START_TS + 200
+    );
+    assert_eq!(messages[0].json, expected);
+}
+
+#[test]
+fn the_envelope_format_needs_object_payloads() {
+    let trace = r#"{"version": 1, "steps": [{"type": "send", "payload": {"a": 1}}, {"type": "send", "payload": [1, 2]}]}"#;
+    let options = ReplayOptions { format: Format::Envelope, positions: false };
+    let error = Replay::new(scenario(), traces(&[("t.json", trace)]), options, START_TS).err().unwrap();
+    assert_eq!(error.to_string(), "t.json: step 2: the envelope format needs JSON object payloads");
+    // The payload format sends anything.
+    assert!(Replay::new(scenario(), traces(&[("t.json", trace)]), ReplayOptions::default(), START_TS).is_ok());
+}
+
+#[test]
+fn position_reports_are_optional_and_only_while_moving() {
+    let without = play(&mut sample_replay(ReplayOptions::default()));
+    assert!(without.iter().all(|m| m.kind != Some("position")));
+
+    let with = play(&mut sample_replay(ReplayOptions { format: Format::Payload, positions: true }));
+    let positions: Vec<&Message> = with.iter().filter(|m| m.kind == Some("position")).collect();
+    assert_eq!(with.len() - positions.len(), without.len(), "the payloads are all still there");
+    let times: Vec<u64> = positions.iter().map(|m| m.sim_ms).collect();
+    // Every 100 ms from the undock (1 s) to the dock (4 s), plus one on arrival.
+    let mut expected: Vec<u64> = (10..40).map(|i| i * 100).collect();
+    expected.push(4000);
+    assert_eq!(times, expected);
+    assert_eq!(
+        positions[5].json,
+        r#"{"device_id":"mm-1","x":5.75,"y":4.567,"heading_rad":-2.0944,"speed_mps":1.0,"timestamp_ms":1001500}"#
+    );
+    let last: serde_json::Value = serde_json::from_str(&positions.last().unwrap().json).unwrap();
+    assert_eq!((last["x"].as_f64(), last["y"].as_f64(), last["speed_mps"].as_f64()), (Some(2.0), Some(5.0), Some(0.0)));
+    // The arrival report comes before the dock it ends with.
+    let arrival = with.iter().position(|m| m.kind == Some("position") && m.sim_ms == 4000).unwrap();
+    assert_eq!(with[arrival + 1].kind, Some("dock"));
+
+    // In the envelope format they are the simulator's own position events.
+    let enveloped = play(&mut sample_replay(ReplayOptions { format: Format::Envelope, positions: true }));
+    let first = enveloped.iter().find(|m| m.kind == Some("position")).unwrap();
+    let event: SimEvent = serde_json::from_str(&first.json).unwrap();
+    assert_eq!(event.kind(), "position");
+    assert_eq!((event.sim_ms, event.timestamp_ms), (1000, 1_001_000));
+}
+
+fn advance_to(replay: &mut Replay, sim_ms: u64) {
+    while replay.state().sim_ms < sim_ms {
+        replay.step();
+    }
+}
+
+#[test]
+fn mms_follow_their_undock_move_and_dock_events() {
+    let mut replay = sample_replay(ReplayOptions::default());
+    replay.start();
+    let mm1 = |replay: &Replay| replay.state().mobile_manipulators[0].clone();
+
+    let view = mm1(&replay);
+    assert_eq!((view.x, view.y, view.at.as_deref()), (6.0, 5.0, Some("stocker")));
+
+    // Backing away from the stocker: 1 m over the second after the undock, leaning 30° to the side
+    // (straight out is -90°; the first MM leans to -120°), so it ends at (5.5, 5 - 0.866).
+    let lean_y = 5.0 - 3f64.sqrt() / 2.0;
+    advance_to(&mut replay, 1500);
+    let view = mm1(&replay);
+    assert!((view.x - 5.75).abs() < 1e-9 && (view.y - (5.0 + lean_y) / 2.0).abs() < 1e-9, "{view:?}");
+    assert!(view.at.is_none() && (view.speed_mps - 1.0).abs() < 1e-9, "{view:?}");
+
+    // Halfway from there to the bonder's dock (2, 5), arriving at the dock event.
+    advance_to(&mut replay, 3000);
+    let view = mm1(&replay);
+    assert!((view.x - 3.75).abs() < 1e-9 && (view.y - (lean_y + 5.0) / 2.0).abs() < 1e-9, "{view:?}");
+    let motion = view.motion.unwrap();
+    assert_eq!((motion.target.at.as_deref(), motion.eta_ms), (Some("bonder"), 1000));
+
+    advance_to(&mut replay, 4000);
+    let view = mm1(&replay);
+    assert_eq!((view.x, view.y, view.at.as_deref(), view.speed_mps), (2.0, 5.0, Some("bonder"), 0.0));
+    assert!(view.motion.is_none());
+
+    // mm-2 has no events: it stays at its start.
+    let mm2 = replay.state().mobile_manipulators[1].clone();
+    assert_eq!((mm2.x, mm2.y, mm2.at), (10.0, 2.0, None));
+}
+
+#[test]
+fn sensor_payloads_update_the_scenario_sensors() {
+    let mut replay = sample_replay(ReplayOptions::default());
+    replay.start();
+    let reading = |replay: &Replay, id: &str| {
+        let sensor = replay.state().sensors.into_iter().find(|s| s.id == id).unwrap();
+        (sensor.last_value, sensor.last_ms)
+    };
+    assert_eq!(reading(&replay, "mm-1.vibration"), (Some(1.25), Some(0)));
+    assert_eq!(reading(&replay, "mm-1.lidar"), (None, None));
+    advance_to(&mut replay, 2500);
+    assert_eq!(reading(&replay, "mm-1.lidar"), (Some(0.5), Some(2500)));
+}
+
+#[test]
+fn nothing_can_be_done_by_hand() {
+    let replay = sample_replay(ReplayOptions::default());
+    let state = replay.state();
+    assert!(state.mobile_manipulators[0].actions.iter().all(|a| !a.available && a.reason.as_deref() == Some(READ_ONLY)));
+    let status = state.replay.unwrap();
+    assert_eq!((status.total, status.duration_ms, status.done), (7, 5000, false));
+    let mut replay = replay;
+    let error = replay.control(Control::PlayScene("x".into()), START_TS).unwrap_err();
+    assert!(error.to_string().contains("no scenes"));
+}
+
+#[test]
+fn pause_holds_and_reset_starts_again() {
+    let mut replay = sample_replay(ReplayOptions::default());
+    replay.start();
+    advance_to(&mut replay, 1000);
+    replay.control(Control::Pause, START_TS).unwrap();
+    for _ in 0..100 {
+        assert!(replay.step().is_empty());
+    }
+    assert_eq!(replay.state().sim_ms, 1000);
+    replay.control(Control::Resume, START_TS).unwrap();
+
+    let restarted = replay.control(Control::Reset, START_TS).unwrap();
+    assert_eq!(restarted.len(), 2, "the payloads at offset 0 again");
+    assert_eq!(restarted[0].seq, 4, "sequence numbers carry on");
+    let state = replay.state();
+    assert_eq!((state.sim_ms, state.mobile_manipulators[0].at.as_deref()), (0, Some("stocker")));
+}
+
+/// The bundled die-processing scenario and its traces, the real ones from Liminal Desk.
+#[test]
+fn the_die_processing_traces_fit_their_scenario() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scenarios/die-processing/die-processing.toml");
+    let scenario = Arc::new(crate::scenario::load_scenario(&path).unwrap());
+    let traces = scenario.replay.as_ref().unwrap().traces.clone();
+    let (mut replay, findings) =
+        Replay::from_files(Arc::clone(&scenario), &traces, ReplayOptions::default(), START_TS).unwrap();
+    assert_eq!(findings, vec![]);
+    let status = replay.state().replay.unwrap();
+    assert_eq!((status.total, status.duration_ms), (2680, 66_000));
+
+    // At 40 s both MMs wait beside the stocker (mm-2 since 6 s, mm-1 since 38 s), apart.
+    replay.start();
+    advance_to(&mut replay, 40_000);
+    let state = replay.state();
+    let (mm1, mm2) = (&state.mobile_manipulators[0], &state.mobile_manipulators[1]);
+    let apart = Vec2::new(mm1.x, mm1.y).distance(Vec2::new(mm2.x, mm2.y));
+    assert!((apart - 1.0).abs() < 1e-6, "{apart} m apart: {mm1:?} {mm2:?}");
+    assert_eq!((mm1.at.as_deref(), mm2.at.as_deref()), (None, None));
+}
+
+fn messages_of(findings: &[Finding]) -> Vec<String> {
+    findings.iter().map(Finding::to_string).collect()
+}
+
+#[test]
+fn findings_report_what_does_not_fit_the_scenario() {
+    let trace = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": "hello"},
+      {"type": "send", "payload": {"event": "pick"}},
+      {"type": "send", "payload": {"device_id": "mm-9", "event": "pick"}},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "weld"}},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "undock", "target": "oven"}},
+      {"type": "send", "payload": {"type": "temperature", "device_id": "mm-1", "value": 3}},
+      {"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 3, "unit": "g"}},
+      {"type": "send", "payload": {"device_id": "mm-2", "event": "pick"}}
+    ]}"#;
+    let (_, findings) = replay(&[("bad.json", trace)], ReplayOptions::default());
+    assert_eq!(
+        messages_of(&findings),
+        vec![
+            "bad.json: step 1: payload is not a JSON object",
+            "bad.json: step 2: payload has no device_id",
+            "bad.json: step 3: device 'mm-9' is not in the scenario",
+            "bad.json: step 4: event 'weld' is not one of the scenario's actions",
+            "bad.json: step 5: unknown machine 'oven'",
+            "bad.json: step 6: no 'temperature' sensor on 'mm-1' in the scenario",
+            "bad.json: step 7: unit 'g' differs from mm-1.vibration's 'm/s^2'",
+            "bad.json: step 8: mm-2 does 'pick' while not docked",
+        ]
+    );
+}
+
+#[test]
+fn findings_report_events_that_do_not_follow_on() {
+    let step = |payload: &str| format!(r#"{{"type": "send", "payload": {payload}}}, {{"type": "delay", "duration_ms": 100}}"#);
+    let steps = [
+        step(r#"{"device_id": "mm-1", "event": "dock", "target": "bonder"}"#),
+        step(r#"{"device_id": "mm-1", "event": "dock", "target": "bonder"}"#),
+        step(r#"{"device_id": "mm-1", "event": "undock", "target": "stocker"}"#),
+        step(r#"{"device_id": "mm-1", "event": "move", "source": "bonder", "destination": "stocker"}"#),
+        step(r#"{"device_id": "mm-1", "event": "dock", "target": "bonder"}"#),
+        step(r#"{"device_id": "mm-1", "event": "move", "source": "bonder", "destination": "stocker"}"#),
+    ];
+    let trace = format!(r#"{{"version": 1, "steps": [{}]}}"#, steps.join(", "));
+    let (_, findings) = replay(&[("seq.json", &trace)], ReplayOptions::default());
+    assert_eq!(
+        messages_of(&findings),
+        vec![
+            "seq.json: step 3: mm-1 docks at 'bonder' but is already docked at 'bonder'",
+            "seq.json: step 5: mm-1 undocks from 'stocker' but is docked at 'bonder'",
+            "seq.json: step 7: mm-1 moves from 'bonder' but was last at 'stocker'",
+            "seq.json: step 9: mm-1 docks at 'bonder' but was moving to 'stocker'",
+            "seq.json: step 11: mm-1 moves while docked at 'bonder' (no undock)",
+        ]
+    );
+}
+
+#[test]
+fn findings_check_timestamps_against_the_delays_and_each_other() {
+    let a = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "pick", "timestamp_ms": 1000}},
+      {"type": "delay", "duration_ms": 100},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "pick", "timestamp_ms": 1100}},
+      {"type": "delay", "duration_ms": 100},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "pick", "timestamp_ms": 1250}}
+    ]}"#;
+    let b = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 1, "unit": "m/s^2", "timestamp_ms": 5000}}
+    ]}"#;
+    let (_, findings) = replay(&[("a.json", a), ("b.json", b)], ReplayOptions::default());
+    assert_eq!(
+        messages_of(&findings),
+        vec![
+            "a.json: step 5: timestamp_ms disagrees with the trace's delays",
+            "b.json: starts at timestamp_ms 5000, 4000 ms after a.json (1000); the replay plays both from 0",
+        ]
+    );
+}
+
+#[test]
+fn repeated_findings_are_grouped() {
+    let send = r#"{"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 1, "unit": "g"}}"#;
+    let trace = format!(r#"{{"version": 1, "steps": [{}]}}"#, [send; 5].join(", "));
+    let (_, findings) = replay(&[("g.json", &trace)], ReplayOptions::default());
+    assert_eq!(
+        messages_of(&findings),
+        vec!["g.json: unit 'g' differs from mm-1.vibration's 'm/s^2' (5 times: steps 1, 2, 3, …)"]
+    );
+}

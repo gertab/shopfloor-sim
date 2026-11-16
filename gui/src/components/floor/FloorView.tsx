@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { formatValue, mmColor } from "../../format";
 import { axisStep, clampToReach, floorScale } from "../../geometry";
-import type { ActionEvent } from "../../hooks/useSimulation";
+import type { LastAction } from "../../hooks/useSimulation";
 import type { MachineDef, MmDef, MmView, Scenario, SensorDef, SensorView, Vec2, WorldState } from "../../types";
 
 /*
@@ -35,7 +35,9 @@ interface FloorViewProps {
   world: WorldState | null;
   selectedMm: string | null;
   focus: Focus;
-  lastActions: Record<string, ActionEvent>;
+  lastActions: Record<string, LastAction>;
+  /** Clicking the floor or a machine can't send an MM anywhere (e.g. while replaying a trace). */
+  readOnly: boolean;
   onSelectMm: (id: string) => void;
   onFloorClick: (point: Vec2 | null) => void;
   onMachineClick: (id: string) => void;
@@ -52,6 +54,7 @@ export function FloorView({
   selectedMm,
   focus,
   lastActions,
+  readOnly,
   onSelectMm,
   onFloorClick,
   onMachineClick,
@@ -124,7 +127,7 @@ export function FloorView({
     return ticks;
   }, [width, height, scale]);
 
-  const ghost = selectedDef && hover ? clampToReach(hover, selectedDef, width, height) : null;
+  const ghost = selectedDef && hover && !readOnly ? clampToReach(hover, selectedDef, width, height) : null;
 
   return (
     <svg
@@ -199,9 +202,9 @@ export function FloorView({
         const view = mmViews.get(def.id);
         const action = lastActions[def.id];
         return view && action ? (
-          // Keyed by command id so the fade-out animation restarts for every new action.
+          // Keyed by the log entry so the fade-out animation restarts for every new action.
           <text
-            key={action.command_id}
+            key={action.seq}
             x={view.x}
             y={sy(view.y) - def.radius_m - 0.25 * scale}
             className="action-flash"

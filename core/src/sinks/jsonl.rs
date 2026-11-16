@@ -1,5 +1,4 @@
-use super::{EventSink, to_json_line};
-use crate::event::SimEvent;
+use super::{EventSink, Message};
 use anyhow::Context;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
@@ -30,9 +29,9 @@ impl JsonlSink {
 }
 
 impl EventSink for JsonlSink {
-    fn write_batch(&mut self, events: &[SimEvent]) -> std::io::Result<()> {
-        for event in events {
-            writeln!(self.writer, "{}", to_json_line(event))?;
+    fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
+        for message in messages {
+            writeln!(self.writer, "{}", message.json)?;
         }
         self.writer.flush()
     }

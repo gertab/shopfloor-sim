@@ -91,6 +91,14 @@ impl Rect {
     pub fn contains_rect(self, other: Rect) -> bool {
         self.contains(other.min) && self.contains(other.max)
     }
+
+    /// The point inside the rectangle closest to `point`.
+    pub fn clamp(self, point: Vec2) -> Vec2 {
+        Vec2::new(
+            point.x.max(self.min.x).min(self.max.x),
+            point.y.max(self.min.y).min(self.max.y),
+        )
+    }
 }
 
 /// Total length of the polyline `start -> points[0] -> points[1] -> ...`.

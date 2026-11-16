@@ -6,7 +6,7 @@ use crate::engine::Engine;
 use crate::event::{EventBody, SceneState, SimEvent};
 use crate::scenario::Scenario;
 use crate::scene::Repeat;
-use crate::sinks::EventSink;
+use crate::sinks::{EventSink, Message};
 use anyhow::{Context, bail};
 use std::sync::Arc;
 
@@ -67,8 +67,9 @@ pub fn run_fast(
         if batch.is_empty() {
             return Ok(());
         }
+        let messages: Vec<Message> = batch.iter().map(Message::from_event).collect();
         for sink in sinks.iter_mut() {
-            sink.write_batch(&batch)?;
+            sink.write_batch(&messages)?;
         }
         events += batch.len() as u64;
         if let Some(ended) = scene_outcome(&batch) {
@@ -126,12 +127,13 @@ mod tests {
     use std::path::Path;
     use std::sync::Mutex;
 
-    /// Collects events in memory.
+    /// Collects events in memory, parsed back from what a sink is given.
     struct MemorySink(Arc<Mutex<Vec<SimEvent>>>);
 
     impl EventSink for MemorySink {
-        fn write_batch(&mut self, events: &[SimEvent]) -> std::io::Result<()> {
-            self.0.lock().unwrap().extend_from_slice(events);
+        fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
+            let events = messages.iter().map(|message| serde_json::from_str(&message.json).unwrap());
+            self.0.lock().unwrap().extend(events);
             Ok(())
         }
     }
