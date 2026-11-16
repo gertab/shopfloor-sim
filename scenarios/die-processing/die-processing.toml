@@ -20,35 +20,35 @@ start_paused = true      # opens paused in the app: Resume (or Space) starts the
 dock_tolerance_m = 0.9   # an MM this close to a dock is "at" that machine
 
 [floor]
-width_m = 10.0
-height_m = 9.0
+width_m = 14.0
+height_m = 10.0
 grid_m = 1.0
 
 # --- Machines: three down the left, serviced from their right; the stocker on the right ------------
 
 [machines.deflasher]
 label = "Deflasher"
-position = [1.75, 7.5]
-size = [2.5, 1.5]
-dock = [3.5, 7.5]
+position = [2.0, 8.0]
+size = [3.0, 2.0]
+dock = [4.0, 8.0]
 
 [machines.encaser]
 label = "Encaser"
-position = [1.75, 4.5]
-size = [2.5, 1.5]
-dock = [3.5, 4.5]
+position = [2.0, 5.0]
+size = [3.0, 2.0]
+dock = [4.0, 5.0]
 
 [machines.bonder]
 label = "Bonder"
-position = [1.75, 1.5]
-size = [2.5, 1.5]
-dock = [3.5, 1.5]
+position = [2.0, 2.0]
+size = [3.0, 2.0]
+dock = [4.0, 2.0]
 
 [machines.stocker]
 label = "Stocker"
-position = [8.5, 4.5]
-size = [2.0, 3.0]
-dock = [7.0, 4.5]        # serviced from its left side
+position = [11.75, 5.0]
+size = [2.5, 4.0]
+dock = [10.0, 5.0]       # serviced from its left side
 
 # --- Mobile manipulators, where the traces start them ----------------------------------------------
 

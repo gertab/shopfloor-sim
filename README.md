@@ -194,7 +194,7 @@ scenarios use the same file format and the same simulator:
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | TCP |
-| [die-processing/die-processing.toml](scenarios/die-processing/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two Liminal Desk traces to replay on it | 10×9 m | None (its traces, in a `[replay]` section) | TCP, MQTT (topics under `die-cell/`) |
+| [die-processing/die-processing.toml](scenarios/die-processing/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two Liminal Desk traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | TCP, MQTT (topics under `die-cell/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size. Machines and MMs are drawn at their real size, and text and markers scale with the floor so
