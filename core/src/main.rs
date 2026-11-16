@@ -21,7 +21,7 @@ use shopfloor_core::scenario::{SinkDef, SinkKind};
 use shopfloor_core::scene::Repeat;
 use shopfloor_core::sinks::{EventSink, SinkMonitor, build_sink};
 use shopfloor_core::trace::{Trace, load_trace};
-use shopfloor_core::{Scenario, SimRuntime, load_scenario};
+use shopfloor_core::{Engine, Scenario, SimRuntime, load_scenario};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -454,28 +454,24 @@ fn replay(
 async fn replay_realtime(replay: Replay) -> anyhow::Result<bool> {
     let runtime = ReplayRuntime::spawn(replay)?;
     let mut state = runtime.watch_state();
-    let interrupted = tokio::signal::ctrl_c();
-    tokio::pin!(interrupted);
-    let finished = loop {
-        if state
-            .borrow_and_update()
-            .replay
-            .as_ref()
-            .is_some_and(|status| status.done)
-        {
-            break true;
-        }
-        tokio::select! {
-            _ = &mut interrupted => break false,
-            changed = state.changed() => {
-                if changed.is_err() {
-                    bail!("the replay stopped unexpectedly");
-                }
+    let finished = until_interrupted(async {
+        loop {
+            if state
+                .borrow_and_update()
+                .replay
+                .as_ref()
+                .is_some_and(|status| status.done)
+            {
+                return Ok(());
+            }
+            if state.changed().await.is_err() {
+                bail!("the replay stopped unexpectedly");
             }
         }
-    };
+    })
+    .await?;
     runtime.shutdown().await;
-    Ok(finished)
+    Ok(finished.is_some())
 }
 
 /// Real time: the same runtime the GUI uses. Ends on scene end, `--duration`, or Ctrl+C.
@@ -484,7 +480,7 @@ async fn run_realtime(
     scene: Option<String>,
     max_sim_ms: Option<u64>,
 ) -> anyhow::Result<RunEnd> {
-    let runtime = SimRuntime::spawn(scenario)?;
+    let runtime = SimRuntime::spawn(Engine::new(scenario))?;
     // Subscribe before playing so the scene's first events are seen.
     let mut events = runtime.subscribe();
     if let Some(id) = &scene {
@@ -492,34 +488,43 @@ async fn run_realtime(
         tracing::info!("playing scene '{id}'");
     }
 
-    let interrupted = tokio::signal::ctrl_c();
-    let limit = async {
-        match max_sim_ms {
-            Some(ms) => tokio::time::sleep(Duration::from_millis(ms)).await,
-            None => std::future::pending().await,
-        }
-    };
-    tokio::pin!(interrupted, limit);
-
-    let end = loop {
-        tokio::select! {
-            _ = &mut interrupted => break RunEnd::Interrupted,
-            _ = &mut limit => break RunEnd::Scene(Outcome::TimeLimit),
-            received = events.recv() => match received {
-                Ok(batch) => {
-                    if scene.is_some()
-                        && let Some(outcome) = scene_outcome(&batch)
-                    {
-                        break RunEnd::Scene(outcome);
+    let end = until_interrupted(async {
+        let limit = async {
+            match max_sim_ms {
+                Some(ms) => tokio::time::sleep(Duration::from_millis(ms)).await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::pin!(limit);
+        loop {
+            tokio::select! {
+                _ = &mut limit => return Ok(RunEnd::Scene(Outcome::TimeLimit)),
+                received = events.recv() => match received {
+                    Ok(batch) => {
+                        if scene.is_some()
+                            && let Some(outcome) = scene_outcome(&batch)
+                        {
+                            return Ok(RunEnd::Scene(outcome));
+                        }
                     }
-                }
-                Err(RecvError::Lagged(_)) => {}
-                Err(RecvError::Closed) => bail!("the simulation stopped unexpectedly"),
-            },
+                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Closed) => bail!("the simulation stopped unexpectedly"),
+                },
+            }
         }
-    };
+    })
+    .await?
+    .unwrap_or(RunEnd::Interrupted);
     runtime.shutdown().await;
     Ok(end)
+}
+
+/// Runs `until` to its end, or stops at Ctrl+C (`None`).
+async fn until_interrupted<T>(until: impl Future<Output = anyhow::Result<T>>) -> anyhow::Result<Option<T>> {
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => Ok(None),
+        result = until => result.map(Some),
+    }
 }
 
 fn describe_sink(sink: &SinkDef) -> String {

@@ -1,10 +1,9 @@
-//! Runs an [`Engine`] ([`SimRuntime`]) or a trace [`Replay`] ([`ReplayRuntime`]) in real time on
-//! tokio.
+//! Runs a [`Driver`] in real time on tokio: the [`Engine`] ([`SimRuntime`]) or a trace [`Replay`]
+//! ([`ReplayRuntime`]).
 //!
-//! One task owns the engine (or replay) and `select!`s over incoming requests and a fixed-rate
-//! tick. Its output goes out in batches on a broadcast channel (the UI bridge, the CLI), and to the
-//! scenario's sinks through an [`OutputWriter`]. The latest [`WorldState`] is published on a watch
-//! channel.
+//! One task owns the driver and `select!`s over incoming requests and a fixed-rate tick. Its output
+//! goes out in batches on a broadcast channel (the UI bridge, the CLI), and to the scenario's sinks
+//! through an [`OutputWriter`]. The latest [`WorldState`] is published on a watch channel.
 //!
 //! The sinks belong to an [`Outputs`]. A runtime started with `spawn` opens its own; the app opens
 //! one per loaded scenario and hands it to each runtime (`spawn_with`), so switching between
@@ -13,10 +12,10 @@
 use crate::command::{CommandEnvelope, Control};
 use crate::engine::{Engine, WorldState};
 use crate::event::SimEvent;
-use crate::replay::Replay;
+use crate::replay::{READ_ONLY, Replay};
 use crate::scenario::Scenario;
-use crate::sinks::{Message, SinkMonitor, SinkThread, build_sink, spawn_sink};
-use anyhow::anyhow;
+use crate::sinks::{Message, SinkMonitor, SinkThread, ToMessage, build_sink, spawn_sink};
+use anyhow::{anyhow, bail};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -106,6 +105,95 @@ impl OutputWriter {
     }
 }
 
+/// What a [`Runtime`] drives, one tick at a time: the [`Engine`] (simulating) or a [`Replay`]
+/// (playing traces back). The fast runs in [`crate::headless`] drive the same way, without the clock.
+pub trait Driver: Send + 'static {
+    /// What a tick, command or control produces: simulator events, or replayed messages.
+    type Item: ToMessage + Send + Sync + 'static;
+    /// What it is called in errors and logs, e.g. "simulation".
+    const NAME: &'static str;
+
+    fn scenario(&self) -> &Arc<Scenario>;
+    /// Simulation (or replay) time.
+    fn sim_ms(&self) -> u64;
+    /// The opening batch (e.g. `sim started`). `now_ms` is the wall-clock time events are stamped with.
+    fn start(&mut self, now_ms: u64) -> Vec<Self::Item>;
+    /// One fixed tick.
+    fn step(&mut self, now_ms: u64) -> Vec<Self::Item>;
+    fn control(&mut self, control: Control, now_ms: u64) -> anyhow::Result<Vec<Self::Item>>;
+    fn apply(&mut self, envelope: CommandEnvelope, now_ms: u64) -> anyhow::Result<Vec<Self::Item>>;
+    fn state(&self) -> WorldState;
+    /// Whether a real-time run opens paused (a scenario's `start_paused`). Fast runs ignore it.
+    fn starts_paused(&self) -> bool {
+        false
+    }
+    /// Whether it has nothing left to produce (a replay that has sent everything).
+    fn is_done(&self) -> bool {
+        false
+    }
+}
+
+impl Driver for Engine {
+    type Item = SimEvent;
+    const NAME: &'static str = "simulation";
+
+    fn scenario(&self) -> &Arc<Scenario> {
+        Engine::scenario(self)
+    }
+    fn sim_ms(&self) -> u64 {
+        Engine::sim_ms(self)
+    }
+    fn start(&mut self, now_ms: u64) -> Vec<SimEvent> {
+        Engine::start(self, now_ms)
+    }
+    fn step(&mut self, now_ms: u64) -> Vec<SimEvent> {
+        Engine::step(self, now_ms)
+    }
+    fn control(&mut self, control: Control, now_ms: u64) -> anyhow::Result<Vec<SimEvent>> {
+        Engine::control(self, control, now_ms)
+    }
+    fn apply(&mut self, envelope: CommandEnvelope, now_ms: u64) -> anyhow::Result<Vec<SimEvent>> {
+        Engine::apply(self, envelope, now_ms)
+    }
+    fn state(&self) -> WorldState {
+        Engine::state(self)
+    }
+    fn starts_paused(&self) -> bool {
+        Engine::scenario(self).sim.start_paused
+    }
+}
+
+impl Driver for Replay {
+    type Item = Message;
+    const NAME: &'static str = "replay";
+
+    fn scenario(&self) -> &Arc<Scenario> {
+        Replay::scenario(self)
+    }
+    fn sim_ms(&self) -> u64 {
+        Replay::sim_ms(self)
+    }
+    fn start(&mut self, _now_ms: u64) -> Vec<Message> {
+        Replay::start(self)
+    }
+    fn step(&mut self, _now_ms: u64) -> Vec<Message> {
+        Replay::step(self)
+    }
+    fn control(&mut self, control: Control, now_ms: u64) -> anyhow::Result<Vec<Message>> {
+        Replay::control(self, control, now_ms)
+    }
+    /// A replay is read-only: it takes no commands.
+    fn apply(&mut self, _envelope: CommandEnvelope, _now_ms: u64) -> anyhow::Result<Vec<Message>> {
+        bail!(READ_ONLY)
+    }
+    fn state(&self) -> WorldState {
+        Replay::state(self)
+    }
+    fn is_done(&self) -> bool {
+        Replay::is_done(self)
+    }
+}
+
 /// Waits for a runtime's task to stop, aborting it if it takes too long.
 async fn stop_task(mut task: JoinHandle<()>, what: &str) {
     if tokio::time::timeout(STOP_TIMEOUT, &mut task).await.is_err() {
@@ -120,46 +208,47 @@ enum Request {
     Shutdown,
 }
 
-pub struct SimRuntime {
+/// Plays a [`Driver`] in real time.
+pub struct Runtime<D: Driver> {
     scenario: Arc<Scenario>,
     requests: mpsc::Sender<Request>,
-    events: broadcast::Sender<EventBatch>,
+    events: broadcast::Sender<Arc<[D::Item]>>,
     state: watch::Receiver<WorldState>,
-    engine_task: JoinHandle<()>,
+    task: JoinHandle<()>,
     writer: OutputWriter,
     /// Outputs this runtime opened itself (`spawn`), closed when it shuts down.
     owned_outputs: Option<Outputs>,
 }
 
-impl SimRuntime {
-    /// Opens the scenario's sinks and starts the engine. Must be called inside a tokio runtime.
-    pub fn spawn(scenario: Arc<Scenario>) -> anyhow::Result<Self> {
-        // The sinks are open before the engine starts, so they see the opening `sim started`.
-        let outputs = Outputs::open(&scenario)?;
-        let mut runtime = Self::spawn_with(scenario, outputs.writer());
+/// Simulates a scenario in real time.
+pub type SimRuntime = Runtime<Engine>;
+/// Replays traces on a scenario's layout in real time. It takes no commands: only pause, resume
+/// and reset (start again).
+pub type ReplayRuntime = Runtime<Replay>;
+
+impl<D: Driver> Runtime<D> {
+    /// Opens the scenario's sinks and starts the driver. Must be called inside a tokio runtime.
+    pub fn spawn(driver: D) -> anyhow::Result<Self> {
+        // The sinks are open before the driver starts, so they see its opening batch.
+        let outputs = Outputs::open(driver.scenario())?;
+        let mut runtime = Self::spawn_with(driver, outputs.writer());
         runtime.owned_outputs = Some(outputs);
         Ok(runtime)
     }
 
-    /// Starts the engine, writing to sinks that are already open (and stay open after it).
-    pub fn spawn_with(scenario: Arc<Scenario>, writer: OutputWriter) -> Self {
-        let engine = Engine::new(Arc::clone(&scenario));
+    /// Starts the driver, writing to sinks that are already open (and stay open after it).
+    pub fn spawn_with(driver: D, writer: OutputWriter) -> Self {
+        let scenario = Arc::clone(driver.scenario());
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        let (state_tx, state) = watch::channel(engine.state());
+        let (state_tx, state) = watch::channel(driver.state());
         let (requests, request_rx) = mpsc::channel(REQUEST_CHANNEL_CAPACITY);
-        let engine_task = tokio::spawn(run_engine(
-            engine,
-            request_rx,
-            events.clone(),
-            writer.clone(),
-            state_tx,
-        ));
+        let task = tokio::spawn(run(driver, request_rx, events.clone(), writer.clone(), state_tx));
         Self {
             scenario,
             requests,
             events,
             state,
-            engine_task,
+            task,
             writer,
             owned_outputs: None,
         }
@@ -174,7 +263,7 @@ impl SimRuntime {
         &self.scenario
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<EventBatch> {
+    pub fn subscribe(&self) -> broadcast::Receiver<Arc<[D::Item]>> {
         self.events.subscribe()
     }
 
@@ -186,41 +275,41 @@ impl SimRuntime {
         self.state.borrow().clone()
     }
 
-    /// Executes a command; returns the engine's validation error, if any.
+    /// Executes a command; returns the driver's error, if any (a replay refuses every command).
     pub async fn send(&self, envelope: CommandEnvelope) -> anyhow::Result<()> {
-        let (reply, response) = oneshot::channel();
-        self.requests
-            .send(Request::Command(envelope, reply))
-            .await
-            .map_err(|_| anyhow!("Simulation is not running"))?;
-        response
-            .await
-            .map_err(|_| anyhow!("Simulation stopped before answering"))?
+        self.request(|reply| Request::Command(envelope, reply)).await
     }
 
-    /// Pause / resume / reset, or play / stop a scene; returns the engine's error, if any.
+    /// Pause / resume / reset, or play / stop a scene; returns the driver's error, if any.
     pub async fn control(&self, control: Control) -> anyhow::Result<()> {
-        let (reply, response) = oneshot::channel();
-        self.requests
-            .send(Request::Control(control, reply))
-            .await
-            .map_err(|_| anyhow!("Simulation is not running"))?;
-        response
-            .await
-            .map_err(|_| anyhow!("Simulation stopped before answering"))?
+        self.request(|reply| Request::Control(control, reply)).await
     }
 
-    /// Stops the engine. Sinks it opened itself then drain and close; shared ones stay open.
+    async fn request(
+        &self,
+        request: impl FnOnce(oneshot::Sender<anyhow::Result<()>>) -> Request,
+    ) -> anyhow::Result<()> {
+        let (reply, response) = oneshot::channel();
+        self.requests
+            .send(request(reply))
+            .await
+            .map_err(|_| anyhow!("The {} is not running", D::NAME))?;
+        response
+            .await
+            .map_err(|_| anyhow!("The {} stopped before answering", D::NAME))?
+    }
+
+    /// Stops the driver. Sinks it opened itself then drain and close; shared ones stay open.
     pub async fn shutdown(self) {
         let Self {
             requests,
-            engine_task,
+            task,
             writer,
             owned_outputs,
             ..
         } = self;
         let _ = requests.send(Request::Shutdown).await;
-        stop_task(engine_task, "engine").await;
+        stop_task(task, D::NAME).await;
         // Sinks run until every writer is gone, this one included.
         drop(writer);
         if let Some(outputs) = owned_outputs {
@@ -229,188 +318,48 @@ impl SimRuntime {
     }
 }
 
-enum ReplayRequest {
-    Control(Control, oneshot::Sender<anyhow::Result<()>>),
-    Shutdown,
-}
-
-/// Plays a [`Replay`] in real time. Unlike [`SimRuntime`] it takes no commands: a replay is
-/// read-only, and only pause, resume and reset (start again) are possible.
-pub struct ReplayRuntime {
-    scenario: Arc<Scenario>,
-    requests: mpsc::Sender<ReplayRequest>,
-    events: broadcast::Sender<MessageBatch>,
-    state: watch::Receiver<WorldState>,
-    task: JoinHandle<()>,
-    writer: OutputWriter,
-    /// Outputs this runtime opened itself (`spawn`), closed when it shuts down.
-    owned_outputs: Option<Outputs>,
-}
-
-impl ReplayRuntime {
-    /// Opens the scenario's sinks and starts playing. Must be called inside a tokio runtime.
-    pub fn spawn(replay: Replay) -> anyhow::Result<Self> {
-        let outputs = Outputs::open(replay.scenario())?;
-        let mut runtime = Self::spawn_with(replay, outputs.writer());
-        runtime.owned_outputs = Some(outputs);
-        Ok(runtime)
-    }
-
-    /// Starts playing, writing to sinks that are already open (and stay open after it).
-    pub fn spawn_with(replay: Replay, writer: OutputWriter) -> Self {
-        let scenario = Arc::clone(replay.scenario());
-        let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        let (state_tx, state) = watch::channel(replay.state());
-        let (requests, request_rx) = mpsc::channel(REQUEST_CHANNEL_CAPACITY);
-        let task = tokio::spawn(run_replay(
-            replay,
-            request_rx,
-            events.clone(),
-            writer.clone(),
-            state_tx,
-        ));
-        Self {
-            scenario,
-            requests,
-            events,
-            state,
-            task,
-            writer,
-            owned_outputs: None,
-        }
-    }
-
-    pub fn sink_status(&self) -> BTreeMap<String, String> {
-        self.writer.status()
-    }
-
-    pub fn scenario(&self) -> &Arc<Scenario> {
-        &self.scenario
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<MessageBatch> {
-        self.events.subscribe()
-    }
-
-    pub fn watch_state(&self) -> watch::Receiver<WorldState> {
-        self.state.clone()
-    }
-
-    pub fn state(&self) -> WorldState {
-        self.state.borrow().clone()
-    }
-
-    /// Pause, resume or reset (start again). Scenes are refused.
-    pub async fn control(&self, control: Control) -> anyhow::Result<()> {
-        let (reply, response) = oneshot::channel();
-        self.requests
-            .send(ReplayRequest::Control(control, reply))
-            .await
-            .map_err(|_| anyhow!("The replay is not running"))?;
-        response
-            .await
-            .map_err(|_| anyhow!("The replay stopped before answering"))?
-    }
-
-    /// Stops playing. Sinks it opened itself then drain and close; shared ones stay open.
-    pub async fn shutdown(self) {
-        let Self {
-            requests,
-            task,
-            writer,
-            owned_outputs,
-            ..
-        } = self;
-        let _ = requests.send(ReplayRequest::Shutdown).await;
-        stop_task(task, "replay").await;
-        // Sinks run until every writer is gone, this one included.
-        drop(writer);
-        if let Some(outputs) = owned_outputs {
-            outputs.close().await;
-        }
-    }
-}
-
-async fn run_replay(
-    mut replay: Replay,
-    mut requests: mpsc::Receiver<ReplayRequest>,
-    events: broadcast::Sender<MessageBatch>,
-    outputs: OutputWriter,
-    state: watch::Sender<WorldState>,
-) {
-    let tick = Duration::from_millis(replay.scenario().sim.tick_ms);
-    let mut interval = tokio::time::interval(tick);
-    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    interval.tick().await;
-
-    publish_messages(&events, &outputs, replay.start());
-    loop {
-        tokio::select! {
-            request = requests.recv() => match request {
-                Some(ReplayRequest::Control(control, reply)) => {
-                    let result = replay
-                        .control(control, now_ms())
-                        .map(|batch| publish_messages(&events, &outputs, batch));
-                    let _ = reply.send(result);
-                }
-                Some(ReplayRequest::Shutdown) | None => break,
-            },
-            _ = interval.tick() => publish_messages(&events, &outputs, replay.step()),
-        }
-        let latest = replay.state();
-        state.send_if_modified(|current| {
-            if *current == latest {
-                false
-            } else {
-                *current = latest;
-                true
-            }
-        });
-    }
-}
-
-async fn run_engine(
-    mut engine: Engine,
+async fn run<D: Driver>(
+    mut driver: D,
     mut requests: mpsc::Receiver<Request>,
-    events: broadcast::Sender<EventBatch>,
+    events: broadcast::Sender<Arc<[D::Item]>>,
     outputs: OutputWriter,
     state: watch::Sender<WorldState>,
 ) {
-    let tick = Duration::from_millis(engine.scenario().sim.tick_ms);
+    let tick = Duration::from_millis(driver.scenario().sim.tick_ms);
     let mut interval = tokio::time::interval(tick);
     // After a stall, carry on from now instead of bursting through the missed ticks.
     interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
     interval.tick().await; // the first tick completes immediately
 
-    publish_events(&events, &outputs, engine.start(now_ms()));
+    publish(&events, &outputs, driver.start(now_ms()));
     // A scenario can open paused: `sim started`, then `sim paused`, and the clock waits at 0.
-    if engine.scenario().sim.start_paused {
-        let batch = engine
+    if driver.starts_paused() {
+        let batch = driver
             .control(Control::Pause, now_ms())
             .expect("pausing never fails");
-        publish_events(&events, &outputs, batch);
-        state.send_replace(engine.state());
+        publish(&events, &outputs, batch);
+        state.send_replace(driver.state());
     }
     loop {
         tokio::select! {
             request = requests.recv() => match request {
                 Some(Request::Command(envelope, reply)) => {
-                    let result = engine
+                    let result = driver
                         .apply(envelope, now_ms())
-                        .map(|batch| publish_events(&events, &outputs, batch));
+                        .map(|batch| publish(&events, &outputs, batch));
                     let _ = reply.send(result);
                 }
                 Some(Request::Control(control, reply)) => {
-                    let result = engine
+                    let result = driver
                         .control(control, now_ms())
-                        .map(|batch| publish_events(&events, &outputs, batch));
+                        .map(|batch| publish(&events, &outputs, batch));
                     let _ = reply.send(result);
                 }
                 Some(Request::Shutdown) | None => break,
             },
-            _ = interval.tick() => publish_events(&events, &outputs, engine.step(now_ms())),
+            _ = interval.tick() => publish(&events, &outputs, driver.step(now_ms())),
         }
-        let latest = engine.state();
+        let latest = driver.state();
         state.send_if_modified(|current| {
             if *current == latest {
                 false
@@ -422,26 +371,17 @@ async fn run_engine(
     }
 }
 
-/// Sends a batch of events to the runtime's subscribers (UI bridge, CLI) and, as messages, to the
-/// sinks (serialised only if a sink is listening).
-fn publish_events(events: &broadcast::Sender<EventBatch>, outputs: &OutputWriter, batch: Vec<SimEvent>) {
+/// Sends a batch to the runtime's subscribers (UI bridge, CLI) and, as messages, to the sinks
+/// (converted only if a sink is listening).
+fn publish<T: ToMessage>(events: &broadcast::Sender<Arc<[T]>>, outputs: &OutputWriter, batch: Vec<T>) {
     if batch.is_empty() {
         return;
     }
+    let batch: Arc<[T]> = batch.into();
     if outputs.wanted() {
-        outputs.write(batch.iter().map(Message::from_event).collect());
+        outputs.write(T::to_messages(&batch));
     }
     // An error only means nobody is subscribed right now.
-    let _ = events.send(batch.into());
-}
-
-/// Sends a batch of replayed messages to the runtime's subscribers and to the sinks.
-fn publish_messages(events: &broadcast::Sender<MessageBatch>, outputs: &OutputWriter, batch: Vec<Message>) {
-    if batch.is_empty() {
-        return;
-    }
-    let batch: MessageBatch = batch.into();
-    outputs.write(Arc::clone(&batch));
     let _ = events.send(batch);
 }
 
@@ -498,7 +438,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn drives_engine_in_real_time_and_records_to_jsonl() {
         let path = std::env::temp_dir().join(format!("shopfloor-runtime-test-{}.jsonl", std::process::id()));
-        let runtime = SimRuntime::spawn(scenario_recording_to(&path)).unwrap();
+        let runtime = SimRuntime::spawn(Engine::new(scenario_recording_to(&path))).unwrap();
         let mut events = runtime.subscribe();
 
         runtime
@@ -601,7 +541,7 @@ mod tests {
         ));
         let mut scenario = (*scenario_recording_to(&path)).clone();
         scenario.sim.start_paused = true;
-        let runtime = SimRuntime::spawn(Arc::new(scenario)).unwrap();
+        let runtime = SimRuntime::spawn(Engine::new(Arc::new(scenario))).unwrap();
         tokio::time::sleep(Duration::from_secs(1)).await;
         let state = runtime.state();
         assert!(state.paused);
@@ -683,7 +623,7 @@ mod tests {
         assert!(connected(1));
 
         // A simulation (an idle MM and no sensors: it only says it started), then shut down.
-        let simulation = SimRuntime::spawn_with(Arc::clone(&scenario), outputs.writer());
+        let simulation = SimRuntime::spawn_with(Engine::new(Arc::clone(&scenario)), outputs.writer());
         let started = read_frame(&mut client);
         assert!(
             started.contains(r#""kind":"sim""#) && started.contains(r#""state":"started""#),
@@ -713,7 +653,7 @@ mod tests {
     #[tokio::test]
     async fn spawn_fails_when_a_sink_cannot_open() {
         let scenario = scenario_recording_to(Path::new("/dev/null/not-a-dir/x.jsonl"));
-        let error = SimRuntime::spawn(scenario).err().unwrap();
+        let error = SimRuntime::spawn(Engine::new(scenario)).err().unwrap();
         assert!(format!("{error:#}").contains("Failed to"));
     }
 }

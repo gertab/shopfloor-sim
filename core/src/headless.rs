@@ -4,9 +4,10 @@
 use crate::command::Control;
 use crate::engine::Engine;
 use crate::event::{EventBody, SceneState, SimEvent};
+use crate::runtime::Driver;
 use crate::scenario::Scenario;
 use crate::scene::Repeat;
-use crate::sinks::{EventSink, Message};
+use crate::sinks::{EventSink, ToMessage};
 use anyhow::{Context, bail};
 use std::sync::Arc;
 
@@ -59,49 +60,70 @@ pub fn run_fast(
         None => {}
     }
 
-    let tick_ms = scenario.sim.tick_ms;
     let mut engine = Engine::new(scenario);
-    let mut events = 0u64;
-    let mut outcome = None;
-    let mut write = |batch: Vec<SimEvent>, outcome: &mut Option<Outcome>| -> anyhow::Result<()> {
-        if batch.is_empty() {
-            return Ok(());
-        }
-        let messages: Vec<Message> = batch.iter().map(Message::from_event).collect();
-        for sink in sinks.iter_mut() {
-            sink.write_batch(&messages)?;
-        }
-        events += batch.len() as u64;
-        if let Some(ended) = scene_outcome(&batch) {
-            *outcome = Some(ended);
-        }
-        Ok(())
-    };
-
-    write(engine.start(run.start_ts), &mut outcome)?;
-    if let Some(id) = &run.scene {
-        let batch = engine.control(Control::PlayScene(id.clone()), run.start_ts)?;
-        write(batch, &mut outcome)?;
-    }
-    let outcome = loop {
-        if let Some(outcome) = outcome.take() {
-            break outcome;
-        }
-        if run.max_sim_ms.is_some_and(|max| engine.sim_ms() >= max) {
-            break Outcome::TimeLimit;
-        }
-        let ts = run.start_ts + engine.sim_ms() + tick_ms;
-        write(engine.step(ts), &mut outcome)?;
-    };
-
-    for sink in sinks.iter_mut() {
-        sink.close()?;
-    }
+    let controls = run
+        .scene
+        .iter()
+        .map(|id| Control::PlayScene(id.clone()))
+        .collect();
+    let (events, outcome) = drive(&mut engine, run.start_ts, controls, sinks, |engine, batch| {
+        scene_outcome(batch).or_else(|| {
+            run.max_sim_ms
+                .is_some_and(|max| engine.sim_ms() >= max)
+                .then_some(Outcome::TimeLimit)
+        })
+    })?;
     Ok(FastRunSummary {
         sim_ms: engine.sim_ms(),
         events,
         outcome,
     })
+}
+
+/// Plays `driver` from its start as fast as possible, writing every batch to `sinks` (closed at the
+/// end). Events are stamped as if it ran in real time from `start_ts`. `controls` are applied right
+/// after the start (e.g. playing a scene). `until` is asked after each batch whether the run is
+/// over; its answer is returned with the number of items written.
+pub fn drive<D: Driver, R>(
+    driver: &mut D,
+    start_ts: u64,
+    controls: Vec<Control>,
+    sinks: &mut [Box<dyn EventSink>],
+    mut until: impl FnMut(&D, &[D::Item]) -> Option<R>,
+) -> anyhow::Result<(u64, R)> {
+    let tick_ms = driver.scenario().sim.tick_ms;
+    let mut written = 0u64;
+    let mut write = |driver: &D, batch: Vec<D::Item>| -> anyhow::Result<Option<R>> {
+        let batch: Arc<[D::Item]> = batch.into();
+        if !batch.is_empty() {
+            let messages = D::Item::to_messages(&batch);
+            for sink in sinks.iter_mut() {
+                sink.write_batch(&messages)?;
+            }
+            written += batch.len() as u64;
+        }
+        Ok(until(driver, &batch))
+    };
+
+    let batch = driver.start(start_ts);
+    let mut ended = write(driver, batch)?;
+    for control in controls {
+        let batch = driver.control(control, start_ts)?;
+        ended = write(driver, batch)?.or(ended);
+    }
+    let end = loop {
+        if let Some(end) = ended.take() {
+            break end;
+        }
+        let ts = start_ts + driver.sim_ms() + tick_ms;
+        let batch = driver.step(ts);
+        ended = write(driver, batch)?;
+    };
+
+    for sink in sinks.iter_mut() {
+        sink.close()?;
+    }
+    Ok((written, end))
 }
 
 /// `Finished` / `Failed` if this batch ends the scene.
@@ -124,6 +146,7 @@ pub fn scene_outcome(batch: &[SimEvent]) -> Option<Outcome> {
 mod tests {
     use super::*;
     use crate::scenario::load_scenario;
+    use crate::sinks::Message;
     use std::path::Path;
     use std::sync::Mutex;
 

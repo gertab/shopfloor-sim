@@ -51,8 +51,13 @@ impl Message {
 }
 
 /// What a runtime broadcasts, as the UI bridge turns it into [`Message`]s.
-pub trait ToMessage {
+pub trait ToMessage: Sized {
     fn to_message(&self) -> Message;
+
+    /// A whole batch as messages (shared as it is when it already is one).
+    fn to_messages(batch: &Arc<[Self]>) -> Arc<[Message]> {
+        batch.iter().map(Self::to_message).collect()
+    }
 }
 
 impl ToMessage for SimEvent {
@@ -64,6 +69,10 @@ impl ToMessage for SimEvent {
 impl ToMessage for Message {
     fn to_message(&self) -> Message {
         self.clone()
+    }
+
+    fn to_messages(batch: &Arc<[Self]>) -> Arc<[Message]> {
+        Arc::clone(batch)
     }
 }
 

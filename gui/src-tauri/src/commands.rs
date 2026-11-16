@@ -6,9 +6,11 @@
 //! (Open, Reload) opens fresh ones, since its outputs may differ.
 
 use crate::bridge::Bridge;
-use shopfloor_core::replay::{Format, READ_ONLY, Replay, ReplayOptions};
+use shopfloor_core::replay::{Format, Replay, ReplayOptions};
 use shopfloor_core::runtime::{Outputs, ReplayRuntime, now_ms};
-use shopfloor_core::{CommandEnvelope, Control, Origin, Scenario, SimCommand, SimRuntime, WorldState};
+use shopfloor_core::{
+    CommandEnvelope, Control, Engine, Origin, Scenario, SimCommand, SimRuntime, WorldState,
+};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -34,49 +36,42 @@ enum Runtime {
     Replay(ReplayRuntime),
 }
 
+/// Calls the same method on whichever runtime is running.
+macro_rules! on_runtime {
+    ($runtime:expr, $r:ident => $call:expr) => {
+        match $runtime {
+            Runtime::Sim($r) => $call,
+            Runtime::Replay($r) => $call,
+        }
+    };
+}
+
 impl Runtime {
     /// The bridge forwarding it to the webview.
     fn bridge(&self, app: AppHandle) -> Bridge {
-        match self {
-            Runtime::Sim(runtime) => Bridge::start(app, runtime.watch_state(), runtime.subscribe()),
-            Runtime::Replay(runtime) => Bridge::start(app, runtime.watch_state(), runtime.subscribe()),
-        }
+        on_runtime!(self, r => Bridge::start(app, r.watch_state(), r.subscribe()))
     }
 
     fn scenario(&self) -> &Arc<Scenario> {
-        match self {
-            Runtime::Sim(runtime) => runtime.scenario(),
-            Runtime::Replay(runtime) => runtime.scenario(),
-        }
+        on_runtime!(self, r => r.scenario())
     }
 
     fn state(&self) -> WorldState {
-        match self {
-            Runtime::Sim(runtime) => runtime.state(),
-            Runtime::Replay(runtime) => runtime.state(),
-        }
+        on_runtime!(self, r => r.state())
     }
 
-    /// Manual commands only reach a simulation: a replay is read-only.
+    /// Manual commands only reach a simulation: a replay refuses them as read-only.
     async fn send(&self, command: SimCommand) -> anyhow::Result<()> {
-        match self {
-            Runtime::Sim(runtime) => runtime.send(CommandEnvelope::new(Origin::Ui, command)).await,
-            Runtime::Replay(_) => anyhow::bail!(READ_ONLY),
-        }
+        let envelope = CommandEnvelope::new(Origin::Ui, command);
+        on_runtime!(self, r => r.send(envelope).await)
     }
 
     async fn control(&self, control: Control) -> anyhow::Result<()> {
-        match self {
-            Runtime::Sim(runtime) => runtime.control(control).await,
-            Runtime::Replay(runtime) => runtime.control(control).await,
-        }
+        on_runtime!(self, r => r.control(control).await)
     }
 
     async fn shutdown(self) {
-        match self {
-            Runtime::Sim(runtime) => runtime.shutdown().await,
-            Runtime::Replay(runtime) => runtime.shutdown().await,
-        }
+        on_runtime!(self, r => r.shutdown().await)
     }
 }
 
@@ -155,7 +150,10 @@ pub(crate) async fn load_scenario(
     }
     // Only now: the new outputs may need the ports the previous ones held.
     let outputs = Outputs::open(&scenario).map_err(|e| format!("{e:#}"))?;
-    let runtime = Runtime::Sim(SimRuntime::spawn_with(Arc::clone(&scenario), outputs.writer()));
+    let runtime = Runtime::Sim(SimRuntime::spawn_with(
+        Engine::new(Arc::clone(&scenario)),
+        outputs.writer(),
+    ));
     tracing::info!("loaded scenario '{}' from {}", scenario.name, path.display());
     *running = Some(Running::new(app, runtime, outputs));
     Ok((*scenario).clone())
@@ -203,7 +201,7 @@ pub(crate) async fn stop_replay(app: AppHandle, host: State<'_, SimHost>) -> Res
         return Ok(());
     }
     let (scenario, outputs) = current.stop_runtime().await;
-    let runtime = Runtime::Sim(SimRuntime::spawn_with(scenario, outputs.writer()));
+    let runtime = Runtime::Sim(SimRuntime::spawn_with(Engine::new(scenario), outputs.writer()));
     *running = Some(Running::new(app, runtime, outputs));
     Ok(())
 }
@@ -328,6 +326,7 @@ fn dialog_path_to_string(path: FilePath) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shopfloor_core::replay::READ_ONLY;
 
     fn replay_runtime() -> Runtime {
         let path = scenarios_dir().join(SAMPLE_SCENARIO);

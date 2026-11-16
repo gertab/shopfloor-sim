@@ -356,6 +356,11 @@ impl Replay {
         &self.scenario
     }
 
+    /// Replay time: milliseconds from the start of the traces.
+    pub fn sim_ms(&self) -> u64 {
+        self.sim_ms
+    }
+
     /// Every payload has been sent and every MM has stopped.
     pub fn is_done(&self) -> bool {
         self.next >= self.timeline.len() && self.sim_ms >= self.duration_ms
@@ -610,23 +615,9 @@ pub fn envelope(
 /// Plays a whole replay as fast as possible into `sinks` (closed at the end). Returns how many
 /// messages were written.
 pub fn run_fast(replay: &mut Replay, sinks: &mut [Box<dyn EventSink>]) -> anyhow::Result<u64> {
-    let mut written = 0u64;
-    let mut write = |batch: Vec<Message>| -> anyhow::Result<()> {
-        if !batch.is_empty() {
-            for sink in sinks.iter_mut() {
-                sink.write_batch(&batch)?;
-            }
-            written += batch.len() as u64;
-        }
-        Ok(())
-    };
-    write(replay.start())?;
-    while !replay.is_done() {
-        write(replay.step())?;
-    }
-    for sink in sinks.iter_mut() {
-        sink.close()?;
-    }
+    let (written, ()) = crate::headless::drive(replay, 0, Vec::new(), sinks, |replay, _| {
+        replay.is_done().then_some(())
+    })?;
     Ok(written)
 }
 
