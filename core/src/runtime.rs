@@ -16,8 +16,8 @@ use crate::event::SimEvent;
 use crate::replay::Replay;
 use crate::scenario::Scenario;
 use crate::sinks::{Message, SinkMonitor, SinkThread, build_sink, spawn_sink};
-use std::collections::BTreeMap;
 use anyhow::anyhow;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
@@ -385,7 +385,9 @@ async fn run_engine(
     publish_events(&events, &outputs, engine.start(now_ms()));
     // A scenario can open paused: `sim started`, then `sim paused`, and the clock waits at 0.
     if engine.scenario().sim.start_paused {
-        let batch = engine.control(Control::Pause, now_ms()).expect("pausing never fails");
+        let batch = engine
+            .control(Control::Pause, now_ms())
+            .expect("pausing never fails");
         publish_events(&events, &outputs, batch);
         state.send_replace(engine.state());
     }
@@ -495,10 +497,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn drives_engine_in_real_time_and_records_to_jsonl() {
-        let path = std::env::temp_dir().join(format!(
-            "shopfloor-runtime-test-{}.jsonl",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("shopfloor-runtime-test-{}.jsonl", std::process::id()));
         let runtime = SimRuntime::spawn(scenario_recording_to(&path)).unwrap();
         let mut events = runtime.subscribe();
 
@@ -526,7 +525,11 @@ mod tests {
         assert_eq!(kinds.iter().filter(|k| **k == "arrived").count(), 1);
         let state = runtime.state();
         assert_eq!(state.mobile_manipulators[0].at.as_deref(), Some("m1"));
-        assert!(state.sim_ms >= 3000, "sim time follows the clock: {}", state.sim_ms);
+        assert!(
+            state.sim_ms >= 3000,
+            "sim time follows the clock: {}",
+            state.sim_ms
+        );
 
         runtime.control(Control::Pause).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -555,10 +558,7 @@ mod tests {
         use crate::replay::{Replay, ReplayOptions};
         use crate::trace::parse_trace;
 
-        let path = std::env::temp_dir().join(format!(
-            "shopfloor-replay-test-{}.jsonl",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("shopfloor-replay-test-{}.jsonl", std::process::id()));
         let trace = parse_trace(
             "t.json",
             r#"{"version": 1, "steps": [
@@ -575,7 +575,10 @@ mod tests {
         assert!(error.to_string().contains("no scenes"));
 
         tokio::time::sleep(Duration::from_millis(300)).await;
-        assert!(!runtime.state().replay.unwrap().done, "the second payload is 500 ms in");
+        assert!(
+            !runtime.state().replay.unwrap().done,
+            "the second payload is 500 ms in"
+        );
         tokio::time::sleep(Duration::from_secs(1)).await;
         let status = runtime.state().replay.unwrap();
         assert_eq!((status.sent, status.done), (2, true));
@@ -661,9 +664,7 @@ mod tests {
             .unwrap(),
         );
         let outputs = Outputs::open(&scenario).unwrap();
-        let connected = |clients: usize| {
-            outputs.status()["tcp"].ends_with(&format!("· {clients} connected"))
-        };
+        let connected = |clients: usize| outputs.status()["tcp"].ends_with(&format!("· {clients} connected"));
         // "listening on 127.0.0.1:PORT · 0 connected"
         let address = outputs.status()["tcp"]
             .trim_start_matches("listening on ")
@@ -684,7 +685,10 @@ mod tests {
         // A simulation (an idle MM and no sensors: it only says it started), then shut down.
         let simulation = SimRuntime::spawn_with(Arc::clone(&scenario), outputs.writer());
         let started = read_frame(&mut client);
-        assert!(started.contains(r#""kind":"sim""#) && started.contains(r#""state":"started""#), "{started}");
+        assert!(
+            started.contains(r#""kind":"sim""#) && started.contains(r#""state":"started""#),
+            "{started}"
+        );
         simulation.shutdown().await;
         assert!(connected(1), "the simulation's end leaves the client connected");
 
@@ -694,7 +698,8 @@ mod tests {
             r#"{"version": 1, "steps": [{"type": "send", "payload": {"device_id": "mm1", "event": "pick"}}]}"#,
         )
         .unwrap();
-        let (replay, _) = Replay::new(Arc::clone(&scenario), vec![trace], ReplayOptions::default(), 0).unwrap();
+        let (replay, _) =
+            Replay::new(Arc::clone(&scenario), vec![trace], ReplayOptions::default(), 0).unwrap();
         let replay = ReplayRuntime::spawn_with(replay, outputs.writer());
         assert_eq!(read_frame(&mut client), r#"{"device_id":"mm1","event":"pick"}"#);
         replay.shutdown().await;

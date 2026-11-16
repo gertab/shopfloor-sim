@@ -383,7 +383,10 @@ fn noise_is_seeded_and_clamped() {
         .collect();
     assert_eq!(values.len(), 40);
     assert!(values.iter().all(|v| (0.0..=2.0).contains(v)));
-    assert!(values.contains(&0.0), "large noise around 0.1 hits the lower clamp");
+    assert!(
+        values.contains(&0.0),
+        "large noise around 0.1 hits the lower clamp"
+    );
     assert!(values.iter().any(|v| *v != 0.0 && *v != 0.1));
 }
 
@@ -442,10 +445,17 @@ fn a_paused_sensor_reports_nothing_until_resumed() {
         "other sensors carry on"
     );
     let view = sensor_view(&engine, "mm1.vibration");
-    assert_eq!((view.last_value, view.last_ms), (Some(0.1), Some(1000)), "keeps its last reading");
+    assert_eq!(
+        (view.last_value, view.last_ms),
+        (Some(0.1), Some(1000)),
+        "keeps its last reading"
+    );
 
     let events = engine.apply(set_paused("mm1.vibration", false), TS).unwrap();
-    assert!(matches!(&events[0].body, EventBody::SensorSet { paused: false, .. }));
+    assert!(matches!(
+        &events[0].body,
+        EventBody::SensorSet { paused: false, .. }
+    ));
     assert_eq!(
         readings_of(&run(&mut engine, 50), "mm1.vibration"),
         vec![(3500, 0.8), (4000, 0.8)],
@@ -487,7 +497,10 @@ fn reset_resumes_paused_sensors() {
     engine.apply(set_paused("hall_temp", true), TS).unwrap();
     engine.control(Control::Reset, TS).unwrap();
     assert!(!sensor_view(&engine, "hall_temp").paused);
-    assert_eq!(readings_of(&run(&mut engine, 50), "hall_temp"), vec![(1000, 22.0)]);
+    assert_eq!(
+        readings_of(&run(&mut engine, 50), "hall_temp"),
+        vec![(1000, 22.0)]
+    );
 }
 
 #[test]
@@ -510,7 +523,10 @@ fn scenes_can_pause_and_resume_a_sensor() {
     engine.control(Control::PlayScene("dropout".into()), TS).unwrap();
     let events = run(&mut engine, 250);
 
-    let times: Vec<u64> = readings_of(&events, "mm1.vibration").iter().map(|r| r.0).collect();
+    let times: Vec<u64> = readings_of(&events, "mm1.vibration")
+        .iter()
+        .map(|r| r.0)
+        .collect();
     assert_eq!(times, vec![500, 1000, 3500, 4000, 4500, 5000]);
     let sets: Vec<(bool, Origin)> = events
         .iter()
@@ -527,10 +543,19 @@ fn invalid_commands_are_rejected_without_side_effects() {
     let mut engine = engine();
     let before = engine.state();
     let cases = [
-        (move_to("mm9", machine("machine1")), "Unknown mobile manipulator 'mm9' (known: mm1, mm2)"),
+        (
+            move_to("mm9", machine("machine1")),
+            "Unknown mobile manipulator 'mm9' (known: mm1, mm2)",
+        ),
         (move_to("mm1", machine("machine9")), "Unknown machine 'machine9'"),
-        (move_to("mm1", Target::Point { x: 0.1, y: 5.0 }), "outside the area mm1 can reach"),
-        (move_to("mm1", Target::Point { x: f64::NAN, y: 5.0 }), "outside the area"),
+        (
+            move_to("mm1", Target::Point { x: 0.1, y: 5.0 }),
+            "outside the area mm1 can reach",
+        ),
+        (
+            move_to("mm1", Target::Point { x: f64::NAN, y: 5.0 }),
+            "outside the area",
+        ),
         (
             ui(SimCommand::SetSensor {
                 sensor: "mm1.vibration".into(),
@@ -552,7 +577,10 @@ fn invalid_commands_are_rejected_without_side_effects() {
             }),
             "must be >= 0",
         ),
-        (ui(SimCommand::Stop { mm: "mm9".into() }), "Unknown mobile manipulator"),
+        (
+            ui(SimCommand::Stop { mm: "mm9".into() }),
+            "Unknown mobile manipulator",
+        ),
     ];
     for (command, expected) in cases {
         let error = engine.apply(command.clone(), TS).unwrap_err().to_string();
@@ -563,7 +591,10 @@ fn invalid_commands_are_rejected_without_side_effects() {
     // Nothing was consumed: the next valid command gets seq 1 and command_id 1.
     let events = engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
     assert_eq!(events[0].seq, 1);
-    assert!(matches!(events[1].body, EventBody::MoveCommand { command_id: 1, .. }));
+    assert!(matches!(
+        events[1].body,
+        EventBody::MoveCommand { command_id: 1, .. }
+    ));
 }
 
 #[test]
@@ -621,7 +652,10 @@ fn sequence_numbers_are_contiguous() {
 #[test]
 fn state_reports_motion_progress_and_dock() {
     let mut engine = engine();
-    assert_eq!(engine.state().mobile_manipulators[0].at.as_deref(), Some("machine1"));
+    assert_eq!(
+        engine.state().mobile_manipulators[0].at.as_deref(),
+        Some("machine1")
+    );
 
     engine.apply(move_to("mm1", machine("machine2")), TS).unwrap();
     let motion = engine.state().mobile_manipulators[0].motion.clone().unwrap();
@@ -710,7 +744,10 @@ fn machine_only_actions_are_rejected_away_from_a_dock() {
         .unwrap();
     run(&mut engine, 300);
     let error = engine.apply(perform("mm1", "pick"), TS).unwrap_err();
-    assert_eq!(error.to_string(), "'pick' needs mm1 at a machine; it is at (6.0, 3.0)");
+    assert_eq!(
+        error.to_string(),
+        "'pick' needs mm1 at a machine; it is at (6.0, 3.0)"
+    );
     // Actions without `requires_machine` work anywhere.
     let events = engine.apply(perform("mm1", "wave"), TS).unwrap();
     assert!(matches!(&events[0].body, EventBody::Action { at: None, .. }));
@@ -729,8 +766,14 @@ fn moving_mms_only_perform_actions_allowed_while_moving() {
     run(&mut engine, 40); // 0.8 m out: between machines
     let events = engine.apply(perform("mm1", "scan"), TS).unwrap();
     match &events[0].body {
-        EventBody::Action { x, at, command_id, .. } => {
-            assert_eq!((*x, at.clone(), *command_id), (4.8, None, 3), "ids shared with moves");
+        EventBody::Action {
+            x, at, command_id, ..
+        } => {
+            assert_eq!(
+                (*x, at.clone(), *command_id),
+                (4.8, None, 3),
+                "ids shared with moves"
+            );
         }
         other => panic!("unexpected {other:?}"),
     }
@@ -744,7 +787,10 @@ fn mms_only_perform_their_own_actions() {
     let error = engine.apply(perform("mm2", "pick"), TS).unwrap_err();
     assert_eq!(error.to_string(), "mm2 cannot perform 'pick' (its actions: scan)");
     let error = engine.apply(perform("mm1", "fly"), TS).unwrap_err();
-    assert_eq!(error.to_string(), "Unknown action 'fly' (known: pick, scan, wave)");
+    assert_eq!(
+        error.to_string(),
+        "Unknown action 'fly' (known: pick, scan, wave)"
+    );
     let error = engine.apply(perform("mm9", "scan"), TS).unwrap_err();
     assert!(error.to_string().contains("Unknown mobile manipulator 'mm9'"));
     assert!(engine.apply(perform("mm2", "scan"), TS).is_ok());
@@ -995,9 +1041,7 @@ fn scene_engine() -> Engine {
 }
 
 fn play(engine: &mut Engine, scene: &str) -> Vec<SimEvent> {
-    engine
-        .control(Control::PlayScene(scene.into()), TS)
-        .unwrap()
+    engine.control(Control::PlayScene(scene.into()), TS).unwrap()
 }
 
 /// `(state, iteration, sim_ms)` of every scene event.
@@ -1005,9 +1049,7 @@ fn scene_events(events: &[SimEvent]) -> Vec<(SceneState, u32, u64)> {
     events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::Scene {
-                state, iteration, ..
-            } => Some((*state, *iteration, e.sim_ms)),
+            EventBody::Scene { state, iteration, .. } => Some((*state, *iteration, e.sim_ms)),
             _ => None,
         })
         .collect()
@@ -1029,7 +1071,11 @@ fn playing_a_scene_runs_its_first_steps_immediately() {
     assert_eq!(kinds, vec!["scene", "undock", "move_command"]);
     assert!(matches!(
         &events[2].body,
-        EventBody::MoveCommand { origin: Origin::Scene, command_id: 1, .. }
+        EventBody::MoveCommand {
+            origin: Origin::Scene,
+            command_id: 1,
+            ..
+        }
     ));
 }
 
@@ -1049,11 +1095,12 @@ fn tracks_run_in_parallel_with_waits_in_sim_time() {
             (SceneState::Finished, 2, 40_000),
         ]
     );
-    assert_eq!(times_of(&events, "action"), vec![10_000, 30_000], "pick on arrival");
     assert_eq!(
-        times_of(&events, "move_command"),
-        vec![0, 10_000, 20_000, 30_000]
+        times_of(&events, "action"),
+        vec![10_000, 30_000],
+        "pick on arrival"
     );
+    assert_eq!(times_of(&events, "move_command"), vec![0, 10_000, 20_000, 30_000]);
     // The vibration track waits 1 s from the start of each iteration.
     assert_eq!(times_of(&events, "sensor_set"), vec![1_000, 21_000]);
     assert!(engine.state().scene.is_none());
@@ -1096,7 +1143,10 @@ fn a_rejected_step_fails_the_scene_but_not_the_world() {
         .unwrap();
     assert_eq!(failure, "'pick' needs mm1 at a machine; it is at (8.0, 3.0)");
     assert!(engine.state().scene.is_none());
-    assert!(!times_of(&run(&mut engine, 50), "sensor").is_empty(), "world keeps running");
+    assert!(
+        !times_of(&run(&mut engine, 50), "sensor").is_empty(),
+        "world keeps running"
+    );
 }
 
 #[test]
@@ -1129,9 +1179,7 @@ fn pause_freezes_and_reset_stops_a_scene() {
 #[test]
 fn unknown_scenes_are_rejected_and_playing_replaces_the_current_scene() {
     let mut engine = scene_engine();
-    let error = engine
-        .control(Control::PlayScene("nope".into()), TS)
-        .unwrap_err();
+    let error = engine.control(Control::PlayScene("nope".into()), TS).unwrap_err();
     assert_eq!(
         error.to_string(),
         "Unknown scene 'nope' (known: bad, forever, instant, shuttle)"

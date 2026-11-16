@@ -34,8 +34,7 @@ struct Client {
 impl TcpSink {
     /// Listens on `bind` (e.g. `127.0.0.1:9000`) and accepts any number of clients.
     pub fn bind(name: &str, bind: &str, monitor: SinkMonitor) -> anyhow::Result<Self> {
-        let listener =
-            TcpListener::bind(bind).with_context(|| format!("Failed to listen on {bind}"))?;
+        let listener = TcpListener::bind(bind).with_context(|| format!("Failed to listen on {bind}"))?;
         // Non-blocking so the acceptor thread can notice `stop`.
         listener.set_nonblocking(true)?;
         let local_addr = listener.local_addr()?;
@@ -130,7 +129,8 @@ impl EventSink for TcpSink {
             }
         });
         if clients.len() != before {
-            self.monitor.set(&self.name, status(self.local_addr, clients.len()));
+            self.monitor
+                .set(&self.name, status(self.local_addr, clients.len()));
         }
         // A client going away is never an error for the sink itself.
         Ok(())
@@ -187,9 +187,7 @@ mod tests {
 
     fn connect(sink: &TcpSink, monitor: &SinkMonitor, expected_clients: usize) -> TcpStream {
         let stream = TcpStream::connect(sink.local_addr()).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
         // Wait for the acceptor to register it.
         let want = format!("· {expected_clients} connected");
         for _ in 0..100 {

@@ -18,9 +18,9 @@ use shopfloor_core::headless::{FastRun, Outcome, run_fast, scene_outcome};
 use shopfloor_core::replay::{self, Format, Replay, ReplayOptions};
 use shopfloor_core::runtime::{ReplayRuntime, now_ms};
 use shopfloor_core::scenario::{SinkDef, SinkKind};
-use shopfloor_core::trace::{Trace, load_trace};
 use shopfloor_core::scene::Repeat;
 use shopfloor_core::sinks::{EventSink, SinkMonitor, build_sink};
+use shopfloor_core::trace::{Trace, load_trace};
 use shopfloor_core::{Scenario, SimRuntime, load_scenario};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -30,7 +30,11 @@ use tokio::sync::broadcast::error::RecvError;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "shopfloor", version, about = "Run shopfloor scenarios and scenes without the GUI")]
+#[command(
+    name = "shopfloor",
+    version,
+    about = "Run shopfloor scenarios and scenes without the GUI"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -119,9 +123,7 @@ enum RunEnd {
 fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 
     let result = match Cli::parse().command {
@@ -149,7 +151,15 @@ fn main() -> ExitCode {
                 (_, true) => Some(false),
                 _ => None,
             };
-            replay(&scenario, traces, format.map(Format::from), positions, fast, jsonl, tcp)
+            replay(
+                &scenario,
+                traces,
+                format.map(Format::from),
+                positions,
+                fast,
+                jsonl,
+                tcp,
+            )
         }
     };
     match result {
@@ -170,7 +180,11 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
         scenario.floor.height_m,
         scenario.sim.tick_ms,
         scenario.sim.seed,
-        if scenario.sim.start_paused { ", starts paused (in the app)" } else { "" }
+        if scenario.sim.start_paused {
+            ", starts paused (in the app)"
+        } else {
+            ""
+        }
     );
     println!("Machines ({}):", scenario.machines.len());
     for machine in &scenario.machines {
@@ -224,7 +238,10 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
 
     let settings = scenario.replay.clone();
     let paths = if traces.is_empty() {
-        settings.as_ref().map(|settings| settings.traces.clone()).unwrap_or_default()
+        settings
+            .as_ref()
+            .map(|settings| settings.traces.clone())
+            .unwrap_or_default()
     } else {
         traces
     };
@@ -349,10 +366,7 @@ fn add_cli_sinks(scenario: &mut Scenario, jsonl: Option<PathBuf>, tcp: Option<St
     if let Some(path) = jsonl {
         scenario.output.sinks.push(SinkDef {
             name: "cli-jsonl".to_string(),
-            kind: SinkKind::Jsonl {
-                path,
-                append: false,
-            },
+            kind: SinkKind::Jsonl { path, append: false },
         });
     }
     if scenario.output.sinks.is_empty() {
@@ -425,7 +439,14 @@ fn replay(
     let finished = tokio::runtime::Runtime::new()
         .context("failed to start the async runtime")?
         .block_on(replay_realtime(replay))?;
-    tracing::info!("{}", if finished { "replay finished" } else { "interrupted" });
+    tracing::info!(
+        "{}",
+        if finished {
+            "replay finished"
+        } else {
+            "interrupted"
+        }
+    );
     Ok(ExitCode::SUCCESS)
 }
 

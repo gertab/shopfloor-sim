@@ -33,7 +33,10 @@ pub enum SimCommand {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Target {
-    Point { x: f64, y: f64 },
+    Point {
+        x: f64,
+        y: f64,
+    },
     /// The machine's dock point.
     Machine(String),
 }
@@ -136,7 +139,10 @@ mod tests {
     #[test]
     fn controls_have_a_stable_json_shape() {
         assert_eq!(serde_json::to_value(Control::Pause).unwrap(), json!("pause"));
-        assert_eq!(serde_json::to_value(Control::StopScene).unwrap(), json!("stop_scene"));
+        assert_eq!(
+            serde_json::to_value(Control::StopScene).unwrap(),
+            json!("stop_scene")
+        );
         assert_eq!(
             serde_json::from_value::<Control>(json!({"play_scene": "production"})).unwrap(),
             Control::PlayScene("production".into())

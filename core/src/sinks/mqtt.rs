@@ -309,7 +309,10 @@ mod tests {
             topics_for(&topics, &sensor_reading(1)),
             ["shopfloor/sensors", "shopfloor/mm1", "shopfloor/all"]
         );
-        assert_eq!(topics_for(&topics, &pick(2, "mm1")), ["shopfloor/mm1", "shopfloor/all"]);
+        assert_eq!(
+            topics_for(&topics, &pick(2, "mm1")),
+            ["shopfloor/mm1", "shopfloor/all"]
+        );
         assert_eq!(topics_for(&topics, &pick(3, "mm2")), ["shopfloor/all"]);
         // No entity: only topics without an entity filter.
         assert_eq!(topics_for(&topics, &sim_started(4)), ["shopfloor/all"]);
@@ -374,7 +377,11 @@ mod tests {
 
     fn wait_for_status(monitor: &SinkMonitor, prefix: &str) {
         for _ in 0..300 {
-            if monitor.snapshot().get("mqtt").is_some_and(|status| status.starts_with(prefix)) {
+            if monitor
+                .snapshot()
+                .get("mqtt")
+                .is_some_and(|status| status.starts_with(prefix))
+            {
                 return;
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -426,7 +433,11 @@ mod tests {
     #[test]
     fn a_missing_broker_is_not_an_error() {
         // A port nobody listens on.
-        let broker = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().to_string();
+        let broker = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .to_string();
         let monitor = SinkMonitor::default();
         let mut sink =
             MqttSink::connect("mqtt", &broker, &sample_topics(), 0, None, monitor.clone()).unwrap();
@@ -435,7 +446,11 @@ mod tests {
 
         let started = Instant::now();
         sink.close().unwrap();
-        assert!(started.elapsed() < CLOSE_TIMEOUT, "close took {:?}", started.elapsed());
+        assert!(
+            started.elapsed() < CLOSE_TIMEOUT,
+            "close took {:?}",
+            started.elapsed()
+        );
         assert!(monitor.snapshot().is_empty());
     }
 }

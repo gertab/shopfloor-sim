@@ -142,7 +142,10 @@ impl Step {
                 SimCommand::SetSensor { sensor, value } => format!("set {sensor} = {value}"),
                 SimCommand::SetSensorNoise { sensor, std } => format!("set {sensor} noise σ = {std}"),
                 SimCommand::SetSensorPaused { sensor, paused: true } => format!("pause {sensor}"),
-                SimCommand::SetSensorPaused { sensor, paused: false } => format!("resume {sensor}"),
+                SimCommand::SetSensorPaused {
+                    sensor,
+                    paused: false,
+                } => format!("resume {sensor}"),
             },
             Step::WaitMs(ms) => format!("wait {}", format_seconds(*ms)),
             Step::WaitIdle(mm) => format!("wait until {mm} is idle"),
@@ -203,10 +206,7 @@ pub(crate) fn resolve_scenes(
                 .enumerate()
                 .map(|(step_index, step)| {
                     resolve_step(step, scenario).unwrap_or_else(|error| {
-                        errors.push(format!(
-                            "{at}, track '{name}', step {}: {error}",
-                            step_index + 1
-                        ));
+                        errors.push(format!("{at}, track '{name}', step {}: {error}", step_index + 1));
                         Step::WaitMs(0)
                     })
                 })
@@ -214,9 +214,7 @@ pub(crate) fn resolve_scenes(
             tracks.push(TrackDef { name, steps });
         }
 
-        let has_wait = tracks
-            .iter()
-            .any(|track| track.steps.iter().any(Step::is_wait));
+        let has_wait = tracks.iter().any(|track| track.steps.iter().any(Step::is_wait));
         if repeat != Repeat::Once && !has_wait {
             errors.push(format!(
                 "{at}: repeats but has no wait steps, so it would restart every tick"
@@ -247,9 +245,7 @@ fn resolve_step(spec: &StepSpec, scenario: &Scenario) -> Result<Step, String> {
                 (None, Some([x, y])) => {
                     let point = Vec2::new(*x, *y);
                     if !(point.is_finite() && scenario.reachable_area(def.radius_m).contains(point)) {
-                        return Err(format!(
-                            "point ({x}, {y}) is outside the area {mm} can reach"
-                        ));
+                        return Err(format!("point ({x}, {y}) is outside the area {mm} can reach"));
                     }
                     Target::Point { x: *x, y: *y }
                 }
@@ -427,7 +423,10 @@ mod tests {
     "#;
 
     fn errors_of(scenes: &str) -> String {
-        format!("{:#}", parse_scenario(&format!("{BASE}\n{scenes}"), None).unwrap_err())
+        format!(
+            "{:#}",
+            parse_scenario(&format!("{BASE}\n{scenes}"), None).unwrap_err()
+        )
     }
 
     #[test]

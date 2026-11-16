@@ -76,7 +76,10 @@ fn scenario() -> Arc<Scenario> {
 }
 
 fn traces(texts: &[(&str, &str)]) -> Vec<Trace> {
-    texts.iter().map(|(name, text)| parse_trace(name, text).unwrap()).collect()
+    texts
+        .iter()
+        .map(|(name, text)| parse_trace(name, text).unwrap())
+        .collect()
 }
 
 fn replay(texts: &[(&str, &str)], options: ReplayOptions) -> (Replay, Vec<Finding>) {
@@ -115,17 +118,40 @@ fn the_payload_format_sends_exactly_the_payloads_at_their_times() {
     assert_eq!(
         sent,
         vec![
-            (0, r#"{"device_id":"mm-1","event":"pick","object":"dies","timestamp_ms":1000000}"#),
-            (0, r#"{"type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#),
-            (1000, r#"{"device_id":"mm-1","event":"undock","target":"stocker","timestamp_ms":1001000}"#),
-            (2000, r#"{"device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#),
-            (2500, r#"{"type":"lidar","device_id":"mm-1","value":0.5,"unit":"m","target":"bonder","timestamp_ms":1002500}"#),
-            (4000, r#"{"device_id":"mm-1","event":"dock","target":"bonder","timestamp_ms":1004000}"#),
-            (5000, r#"{"device_id":"mm-1","event":"place","object":"dies","timestamp_ms":1005000}"#),
+            (
+                0,
+                r#"{"device_id":"mm-1","event":"pick","object":"dies","timestamp_ms":1000000}"#
+            ),
+            (
+                0,
+                r#"{"type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#
+            ),
+            (
+                1000,
+                r#"{"device_id":"mm-1","event":"undock","target":"stocker","timestamp_ms":1001000}"#
+            ),
+            (
+                2000,
+                r#"{"device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#
+            ),
+            (
+                2500,
+                r#"{"type":"lidar","device_id":"mm-1","value":0.5,"unit":"m","target":"bonder","timestamp_ms":1002500}"#
+            ),
+            (
+                4000,
+                r#"{"device_id":"mm-1","event":"dock","target":"bonder","timestamp_ms":1004000}"#
+            ),
+            (
+                5000,
+                r#"{"device_id":"mm-1","event":"place","object":"dies","timestamp_ms":1005000}"#
+            ),
         ]
     );
-    let routing: Vec<(Option<&str>, Option<&str>)> =
-        messages.iter().map(|m| (m.kind, m.device_id.as_deref())).collect();
+    let routing: Vec<(Option<&str>, Option<&str>)> = messages
+        .iter()
+        .map(|m| (m.kind, m.device_id.as_deref()))
+        .collect();
     assert_eq!(
         routing,
         vec![
@@ -138,7 +164,10 @@ fn the_payload_format_sends_exactly_the_payloads_at_their_times() {
             (Some("action"), Some("mm-1")),
         ]
     );
-    assert_eq!(messages.iter().map(|m| m.seq).collect::<Vec<_>>(), (1..=7).collect::<Vec<_>>());
+    assert_eq!(
+        messages.iter().map(|m| m.seq).collect::<Vec<_>>(),
+        (1..=7).collect::<Vec<_>>()
+    );
     assert!(replay.is_done());
     assert_eq!(replay.state().sim_ms, 5000, "time stops at the end");
 }
@@ -163,13 +192,28 @@ fn the_envelope_format_adds_the_simulator_fields_in_front() {
 #[test]
 fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
     assert_eq!(
-        envelope(3, 1500, Some("action"), Some(42), r#"{"device_id":"mm-1","event":"pick"}"#),
+        envelope(
+            3,
+            1500,
+            Some("action"),
+            Some(42),
+            r#"{"device_id":"mm-1","event":"pick"}"#
+        ),
         r#"{"v":2,"seq":3,"sim_ms":1500,"kind":"action","timestamp_ms":42,"device_id":"mm-1","event":"pick"}"#
     );
-    assert_eq!(envelope(1, 0, None, None, "{}"), r#"{"v":2,"seq":1,"sim_ms":0,"kind":null}"#);
+    assert_eq!(
+        envelope(1, 0, None, None, "{}"),
+        r#"{"v":2,"seq":1,"sim_ms":0,"kind":null}"#
+    );
 
     let trace = r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 200}, {"type": "send", "payload": {"device_id": "mm-1", "event": "pick"}}]}"#;
-    let (mut replay, _) = replay(&[("t.json", trace)], ReplayOptions { format: Format::Envelope, positions: false });
+    let (mut replay, _) = replay(
+        &[("t.json", trace)],
+        ReplayOptions {
+            format: Format::Envelope,
+            positions: false,
+        },
+    );
     let messages = play(&mut replay);
     let expected = format!(
         r#"{{"v":2,"seq":1,"sim_ms":200,"kind":"action","timestamp_ms":{},"device_id":"mm-1","event":"pick"}}"#,
@@ -181,11 +225,27 @@ fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
 #[test]
 fn the_envelope_format_needs_object_payloads() {
     let trace = r#"{"version": 1, "steps": [{"type": "send", "payload": {"a": 1}}, {"type": "send", "payload": [1, 2]}]}"#;
-    let options = ReplayOptions { format: Format::Envelope, positions: false };
-    let error = Replay::new(scenario(), traces(&[("t.json", trace)]), options, START_TS).err().unwrap();
-    assert_eq!(error.to_string(), "t.json: step 2: the envelope format needs JSON object payloads");
+    let options = ReplayOptions {
+        format: Format::Envelope,
+        positions: false,
+    };
+    let error = Replay::new(scenario(), traces(&[("t.json", trace)]), options, START_TS)
+        .err()
+        .unwrap();
+    assert_eq!(
+        error.to_string(),
+        "t.json: step 2: the envelope format needs JSON object payloads"
+    );
     // The payload format sends anything.
-    assert!(Replay::new(scenario(), traces(&[("t.json", trace)]), ReplayOptions::default(), START_TS).is_ok());
+    assert!(
+        Replay::new(
+            scenario(),
+            traces(&[("t.json", trace)]),
+            ReplayOptions::default(),
+            START_TS
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -193,9 +253,16 @@ fn position_reports_are_optional_and_only_while_moving() {
     let without = play(&mut sample_replay(ReplayOptions::default()));
     assert!(without.iter().all(|m| m.kind != Some("position")));
 
-    let with = play(&mut sample_replay(ReplayOptions { format: Format::Payload, positions: true }));
+    let with = play(&mut sample_replay(ReplayOptions {
+        format: Format::Payload,
+        positions: true,
+    }));
     let positions: Vec<&Message> = with.iter().filter(|m| m.kind == Some("position")).collect();
-    assert_eq!(with.len() - positions.len(), without.len(), "the payloads are all still there");
+    assert_eq!(
+        with.len() - positions.len(),
+        without.len(),
+        "the payloads are all still there"
+    );
     let times: Vec<u64> = positions.iter().map(|m| m.sim_ms).collect();
     // Every 100 ms from the undock (1 s), through the move and the dock's glide, to the place (5 s),
     // where it reports once more on arrival. The move flows into the glide, so no stop at 4 s.
@@ -207,14 +274,23 @@ fn position_reports_are_optional_and_only_while_moving() {
         r#"{"device_id":"mm-1","x":5.75,"y":4.567,"heading_rad":-2.0944,"speed_mps":1.0,"timestamp_ms":1001500}"#
     );
     let last: serde_json::Value = serde_json::from_str(&positions.last().unwrap().json).unwrap();
-    assert_eq!((last["x"].as_f64(), last["y"].as_f64(), last["speed_mps"].as_f64()), (Some(2.0), Some(5.0), Some(0.0)));
+    assert_eq!(
+        (last["x"].as_f64(), last["y"].as_f64(), last["speed_mps"].as_f64()),
+        (Some(2.0), Some(5.0), Some(0.0))
+    );
     // The arrival report comes before the place that follows the docking.
-    let arrival = with.iter().position(|m| m.kind == Some("position") && m.sim_ms == 5000).unwrap();
+    let arrival = with
+        .iter()
+        .position(|m| m.kind == Some("position") && m.sim_ms == 5000)
+        .unwrap();
     assert_eq!(with[arrival + 1].kind, Some("action"));
     assert!(with[arrival + 1].json.contains(r#""event":"place""#));
 
     // In the envelope format they are the simulator's own position events.
-    let enveloped = play(&mut sample_replay(ReplayOptions { format: Format::Envelope, positions: true }));
+    let enveloped = play(&mut sample_replay(ReplayOptions {
+        format: Format::Envelope,
+        positions: true,
+    }));
     let first = enveloped.iter().find(|m| m.kind == Some("position")).unwrap();
     let event: SimEvent = serde_json::from_str(&first.json).unwrap();
     assert_eq!(event.kind(), "position");
@@ -245,14 +321,20 @@ fn mms_follow_their_undock_move_and_dock_events() {
     advance_to(&mut replay, 1500);
     let view = mm1(&replay);
     assert!(close(&view, 5.75, (5.0 + out_y) / 2.0), "{view:?}");
-    assert!(view.at.is_none() && (view.speed_mps - 1.0).abs() < 1e-9, "{view:?}");
+    assert!(
+        view.at.is_none() && (view.speed_mps - 1.0).abs() < 1e-9,
+        "{view:?}"
+    );
 
     // The move drives between the approach points (5.5 -> 1.5), arriving at the dock event.
     advance_to(&mut replay, 3000);
     let view = mm1(&replay);
     assert!(close(&view, 3.5, out_y), "{view:?}");
     let motion = view.motion.unwrap();
-    assert_eq!((motion.target.at.as_deref(), motion.eta_ms), (Some("bonder"), 1000));
+    assert_eq!(
+        (motion.target.at.as_deref(), motion.eta_ms),
+        (Some("bonder"), 1000)
+    );
 
     // Docking glides it into the bonder's dock (2, 5) over the next second.
     advance_to(&mut replay, 4500);
@@ -262,7 +344,10 @@ fn mms_follow_their_undock_move_and_dock_events() {
 
     advance_to(&mut replay, 5000);
     let view = mm1(&replay);
-    assert_eq!((view.x, view.y, view.at.as_deref(), view.speed_mps), (2.0, 5.0, Some("bonder"), 0.0));
+    assert_eq!(
+        (view.x, view.y, view.at.as_deref(), view.speed_mps),
+        (2.0, 5.0, Some("bonder"), 0.0)
+    );
     assert!(view.motion.is_none());
 
     // mm-2 has no events: it stays at its start.
@@ -288,11 +373,18 @@ fn sensor_payloads_update_the_scenario_sensors() {
 fn nothing_can_be_done_by_hand() {
     let replay = sample_replay(ReplayOptions::default());
     let state = replay.state();
-    assert!(state.mobile_manipulators[0].actions.iter().all(|a| !a.available && a.reason.as_deref() == Some(READ_ONLY)));
+    assert!(
+        state.mobile_manipulators[0]
+            .actions
+            .iter()
+            .all(|a| !a.available && a.reason.as_deref() == Some(READ_ONLY))
+    );
     let status = state.replay.unwrap();
     assert_eq!((status.total, status.duration_ms, status.done), (7, 5000, false));
     let mut replay = replay;
-    let error = replay.control(Control::PlayScene("x".into()), START_TS).unwrap_err();
+    let error = replay
+        .control(Control::PlayScene("x".into()), START_TS)
+        .unwrap_err();
     assert!(error.to_string().contains("no scenes"));
 }
 
@@ -312,7 +404,10 @@ fn pause_holds_and_reset_starts_again() {
     assert_eq!(restarted.len(), 2, "the payloads at offset 0 again");
     assert_eq!(restarted[0].seq, 4, "sequence numbers carry on");
     let state = replay.state();
-    assert_eq!((state.sim_ms, state.mobile_manipulators[0].at.as_deref()), (0, Some("stocker")));
+    assert_eq!(
+        (state.sim_ms, state.mobile_manipulators[0].at.as_deref()),
+        (0, Some("stocker"))
+    );
 }
 
 /// The bundled die-processing scenario and its traces, the real ones from Liminal Desk.
@@ -372,7 +467,9 @@ fn findings_report_what_does_not_fit_the_scenario() {
 
 #[test]
 fn findings_report_events_that_do_not_follow_on() {
-    let step = |payload: &str| format!(r#"{{"type": "send", "payload": {payload}}}, {{"type": "delay", "duration_ms": 100}}"#);
+    let step = |payload: &str| {
+        format!(r#"{{"type": "send", "payload": {payload}}}, {{"type": "delay", "duration_ms": 100}}"#)
+    };
     let steps = [
         step(r#"{"device_id": "mm-1", "event": "dock", "target": "bonder"}"#),
         step(r#"{"device_id": "mm-1", "event": "dock", "target": "bonder"}"#),
@@ -419,7 +516,8 @@ fn findings_check_timestamps_against_the_delays_and_each_other() {
 
 #[test]
 fn repeated_findings_are_grouped() {
-    let send = r#"{"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 1, "unit": "g"}}"#;
+    let send =
+        r#"{"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 1, "unit": "g"}}"#;
     let trace = format!(r#"{{"version": 1, "steps": [{}]}}"#, [send; 5].join(", "));
     let (_, findings) = replay(&[("g.json", &trace)], ReplayOptions::default());
     assert_eq!(

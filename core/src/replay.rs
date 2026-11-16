@@ -99,7 +99,11 @@ struct Findings(Vec<Finding>);
 
 impl Findings {
     fn add(&mut self, trace: &str, step: Option<usize>, message: String) {
-        match self.0.iter_mut().find(|f| f.trace == trace && f.message == message) {
+        match self
+            .0
+            .iter_mut()
+            .find(|f| f.trace == trace && f.message == message)
+        {
             Some(finding) => finding.steps.extend(step),
             None => self.0.push(Finding {
                 trace: trace.to_string(),
@@ -302,7 +306,15 @@ impl Replay {
             .iter()
             .enumerate()
             .map(|(index, def)| {
-                build_track(&scenario, index, def, &timeline, &trace_names, &mut command_ids, &mut findings)
+                build_track(
+                    &scenario,
+                    index,
+                    def,
+                    &timeline,
+                    &trace_names,
+                    &mut command_ids,
+                    &mut findings,
+                )
             })
             .collect::<Vec<_>>();
 
@@ -640,9 +652,16 @@ fn check_payloads(scenario: &Scenario, timeline: &[Item], names: &[String], find
             && !matches!(event.as_str(), "move" | "dock" | "undock")
             && scenario.action(event).is_none()
         {
-            findings.add(trace, step, format!("event '{event}' is not one of the scenario's actions"));
+            findings.add(
+                trace,
+                step,
+                format!("event '{event}' is not one of the scenario's actions"),
+            );
         }
-        for machine in [&payload.target, &payload.source, &payload.destination].into_iter().flatten() {
+        for machine in [&payload.target, &payload.source, &payload.destination]
+            .into_iter()
+            .flatten()
+        {
             if scenario.machine(machine).is_none() {
                 findings.add(trace, step, format!("unknown machine '{machine}'"));
             }
@@ -690,7 +709,10 @@ fn check_timestamps(timeline: &[Item], names: &[String], findings: &mut Findings
             Some(_) => {}
         }
     }
-    let first = bases.iter().enumerate().find_map(|(index, base)| base.map(|base| (index, base)));
+    let first = bases
+        .iter()
+        .enumerate()
+        .find_map(|(index, base)| base.map(|base| (index, base)));
     if let Some((first_index, first_base)) = first {
         for (index, base) in bases.iter().enumerate() {
             if let Some(base) = base
@@ -715,8 +737,16 @@ fn check_timestamps(timeline: &[Item], names: &[String], findings: &mut Findings
 /// Where MM number `mm_index` waits beside `machine` (see [`APPROACH_M`]).
 fn approach(scenario: &Scenario, machine: &MachineDef, mm_index: usize, radius_m: f64) -> Vec2 {
     let out = machine.dock - machine.position;
-    let out = if out.length() > 1e-9 { out.heading() } else { -std::f64::consts::FRAC_PI_2 };
-    let lean = if mm_index.is_multiple_of(2) { -APPROACH_LEAN_RAD } else { APPROACH_LEAN_RAD };
+    let out = if out.length() > 1e-9 {
+        out.heading()
+    } else {
+        -std::f64::consts::FRAC_PI_2
+    };
+    let lean = if mm_index.is_multiple_of(2) {
+        -APPROACH_LEAN_RAD
+    } else {
+        APPROACH_LEAN_RAD
+    };
     let direction = Vec2::new((out + lean).cos(), (out + lean).sin());
     scenario
         .reachable_area(radius_m)
@@ -755,7 +785,9 @@ fn build_track(
         }
     });
     let (start, docked) = first.unwrap_or_else(|| {
-        let docked = scenario.machine_docked_at(def.start).map(|machine| machine.id.clone());
+        let docked = scenario
+            .machine_docked_at(def.start)
+            .map(|machine| machine.id.clone());
         (def.start, docked)
     });
     let mut track = Track {
@@ -804,13 +836,22 @@ fn build_track(
                     && let Some(last) = &last_machine
                     && last != source
                 {
-                    findings.add(trace, step, format!("{id} moves from '{source}' but was last at '{last}'"));
+                    findings.add(
+                        trace,
+                        step,
+                        format!("{id} moves from '{source}' but was last at '{last}'"),
+                    );
                 }
                 if let Some(docked) = track.docked_now() {
-                    findings.add(trace, step, format!("{id} moves while docked at '{docked}' (no undock)"));
+                    findings.add(
+                        trace,
+                        step,
+                        format!("{id} moves while docked at '{docked}' (no undock)"),
+                    );
                     track.docked.push((t, None));
                 }
-                let Some(destination) = payload.destination.as_deref().and_then(|m| scenario.machine(m)) else {
+                let Some(destination) = payload.destination.as_deref().and_then(|m| scenario.machine(m))
+                else {
                     continue;
                 };
                 // To the destination's approach point; the dock glides it the rest of the way.
@@ -838,7 +879,14 @@ fn build_track(
                     continue;
                 };
                 if let Some(docked) = track.docked_now() {
-                    findings.add(trace, step, format!("{id} docks at '{}' but is already docked at '{docked}'", machine.id));
+                    findings.add(
+                        trace,
+                        step,
+                        format!(
+                            "{id} docks at '{}' but is already docked at '{docked}'",
+                            machine.id
+                        ),
+                    );
                 }
                 if let Some(destination) = &heading_to
                     && destination != &machine.id

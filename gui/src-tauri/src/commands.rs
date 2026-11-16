@@ -8,9 +8,7 @@
 use crate::bridge::Bridge;
 use shopfloor_core::replay::{Format, READ_ONLY, Replay, ReplayOptions};
 use shopfloor_core::runtime::{Outputs, ReplayRuntime, now_ms};
-use shopfloor_core::{
-    CommandEnvelope, Control, Origin, Scenario, SimCommand, SimRuntime, WorldState,
-};
+use shopfloor_core::{CommandEnvelope, Control, Origin, Scenario, SimCommand, SimRuntime, WorldState};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -131,7 +129,10 @@ const SAMPLE_SCENARIO: &str = "sample-floor.toml";
 
 #[tauri::command]
 pub(crate) fn default_scenario_path() -> String {
-    scenarios_dir().join(SAMPLE_SCENARIO).to_string_lossy().to_string()
+    scenarios_dir()
+        .join(SAMPLE_SCENARIO)
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Loads a scenario (default: `scenarios/sample-floor.toml`) and (re)starts the simulation with it.
@@ -174,7 +175,11 @@ pub(crate) async fn start_replay(
     let scenario = Arc::clone(running.as_ref().ok_or("No scenario loaded")?.runtime.scenario());
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
     let options = ReplayOptions {
-        format: if envelope { Format::Envelope } else { Format::Payload },
+        format: if envelope {
+            Format::Envelope
+        } else {
+            Format::Payload
+        },
         positions,
     };
     let (replay, warnings) = build_replay(&scenario, &paths, options).map_err(|e| format!("{e:#}"))?;
@@ -219,9 +224,7 @@ pub(crate) async fn get_state(host: State<'_, SimHost>) -> Result<Option<WorldSt
 
 /// Live status of sinks that report one (TCP: address and connected clients), by sink name.
 #[tauri::command]
-pub(crate) async fn get_sink_status(
-    host: State<'_, SimHost>,
-) -> Result<BTreeMap<String, String>, String> {
+pub(crate) async fn get_sink_status(host: State<'_, SimHost>) -> Result<BTreeMap<String, String>, String> {
     let running = host.running.lock().await;
     Ok(running
         .as_ref()
@@ -230,17 +233,10 @@ pub(crate) async fn get_sink_status(
 }
 
 #[tauri::command]
-pub(crate) async fn send_command(
-    host: State<'_, SimHost>,
-    command: SimCommand,
-) -> Result<(), String> {
+pub(crate) async fn send_command(host: State<'_, SimHost>, command: SimCommand) -> Result<(), String> {
     let running = host.running.lock().await;
     let running = running.as_ref().ok_or("No scenario loaded")?;
-    running
-        .runtime
-        .send(command)
-        .await
-        .map_err(|e| format!("{e:#}"))
+    running.runtime.send(command).await.map_err(|e| format!("{e:#}"))
 }
 
 #[tauri::command]
@@ -342,8 +338,7 @@ mod tests {
             r#"{"version": 1, "steps": [{"type": "send", "payload": {"device_id": "mm1", "event": "pick"}}]}"#,
         )
         .unwrap();
-        let (replay, _) =
-            Replay::new(Arc::new(scenario), vec![trace], ReplayOptions::default(), 0).unwrap();
+        let (replay, _) = Replay::new(Arc::new(scenario), vec![trace], ReplayOptions::default(), 0).unwrap();
         Runtime::Replay(ReplayRuntime::spawn(replay).unwrap())
     }
 
@@ -355,7 +350,12 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), READ_ONLY);
-        assert!(runtime.control(Control::PlayScene("production".into())).await.is_err());
+        assert!(
+            runtime
+                .control(Control::PlayScene("production".into()))
+                .await
+                .is_err()
+        );
         assert!(runtime.control(Control::Pause).await.is_ok());
         runtime.shutdown().await;
     }
@@ -363,7 +363,11 @@ mod tests {
     #[test]
     fn the_app_opens_the_sample_scenario_in_scenarios() {
         let path = PathBuf::from(default_scenario_path());
-        assert!(path.ends_with("scenarios/sample-floor.toml"), "{}", path.display());
+        assert!(
+            path.ends_with("scenarios/sample-floor.toml"),
+            "{}",
+            path.display()
+        );
         shopfloor_core::load_scenario(&path).expect("sample scenario loads");
     }
 }

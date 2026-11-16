@@ -43,7 +43,10 @@ impl Trace {
     }
 
     pub fn sends(&self) -> usize {
-        self.steps.iter().filter(|step| matches!(step, Step::Send(_))).count()
+        self.steps
+            .iter()
+            .filter(|step| matches!(step, Step::Send(_)))
+            .count()
     }
 }
 
@@ -73,8 +76,8 @@ fn present<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<&'de Raw
 }
 
 pub fn load_trace(path: &Path) -> anyhow::Result<Trace> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read trace {}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("Failed to read trace {}", path.display()))?;
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
@@ -84,10 +87,13 @@ pub fn load_trace(path: &Path) -> anyhow::Result<Trace> {
 
 /// Parses and validates a trace. Errors name the step and its line.
 pub fn parse_trace(name: &str, text: &str) -> anyhow::Result<Trace> {
-    let file: TraceFile = serde_json::from_str(text)
-        .map_err(|error| anyhow!("{name}: not a valid trace: {error}"))?;
+    let file: TraceFile =
+        serde_json::from_str(text).map_err(|error| anyhow!("{name}: not a valid trace: {error}"))?;
     if file.version.get() != "1" {
-        bail!("{name}: unsupported trace version {}; expected the integer 1", file.version.get());
+        bail!(
+            "{name}: unsupported trace version {}; expected the integer 1",
+            file.version.get()
+        );
     }
     if file.steps.is_empty() {
         bail!("{name}: steps must be a non-empty array");
@@ -271,20 +277,56 @@ mod tests {
     fn rejects_what_desk_rejects() {
         let cases = [
             ("not json", "not a valid trace"),
-            (r#"{"version": 2, "steps": [{"type": "delay", "duration_ms": 1}]}"#, "unsupported trace version 2"),
-            (r#"{"version": 1.0, "steps": [{"type": "delay", "duration_ms": 1}]}"#, "unsupported trace version 1.0"),
-            (r#"{"version": 1, "steps": []}"#, "steps must be a non-empty array"),
+            (
+                r#"{"version": 2, "steps": [{"type": "delay", "duration_ms": 1}]}"#,
+                "unsupported trace version 2",
+            ),
+            (
+                r#"{"version": 1.0, "steps": [{"type": "delay", "duration_ms": 1}]}"#,
+                "unsupported trace version 1.0",
+            ),
+            (
+                r#"{"version": 1, "steps": []}"#,
+                "steps must be a non-empty array",
+            ),
             (r#"{"version": 1}"#, "missing field `steps`"),
             (r#"{"version": 1, "steps": [], "x": 1}"#, "unknown field `x`"),
-            (r#"{"version": 1, "steps": [{"type": "wait", "duration_ms": 1}]}"#, "type must be \"send\" or \"delay\""),
-            (r#"{"version": 1, "steps": [{"type": "send"}]}"#, "a send step needs a `payload`"),
-            (r#"{"version": 1, "steps": [{"type": "send", "payload": 1, "duration_ms": 1}]}"#, "takes no `duration_ms`"),
-            (r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": -1}]}"#, "step 1 (line 1)"),
-            (r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 1.5}]}"#, "invalid type: floating point"),
-            (r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": true}]}"#, "invalid type: boolean"),
-            (r#"{"version": 1, "steps": [{"type": "delay"}]}"#, "needs a `duration_ms`"),
-            (r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 1, "x": 0}]}"#, "unknown field `x`"),
-            (r#"{"version": 1, "steps": [{"type": "delay", "type": "delay", "duration_ms": 1}]}"#, "duplicate field `type`"),
+            (
+                r#"{"version": 1, "steps": [{"type": "wait", "duration_ms": 1}]}"#,
+                "type must be \"send\" or \"delay\"",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "send"}]}"#,
+                "a send step needs a `payload`",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "send", "payload": 1, "duration_ms": 1}]}"#,
+                "takes no `duration_ms`",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": -1}]}"#,
+                "step 1 (line 1)",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 1.5}]}"#,
+                "invalid type: floating point",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": true}]}"#,
+                "invalid type: boolean",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay"}]}"#,
+                "needs a `duration_ms`",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 1, "x": 0}]}"#,
+                "unknown field `x`",
+            ),
+            (
+                r#"{"version": 1, "steps": [{"type": "delay", "type": "delay", "duration_ms": 1}]}"#,
+                "duplicate field `type`",
+            ),
             (r#"{"version": 1, "steps": [3]}"#, "step 1"),
         ];
         for (text, expected) in cases {
@@ -296,12 +338,19 @@ mod tests {
     #[test]
     fn errors_give_the_line_of_the_step() {
         let text = "{\n  \"version\": 1,\n  \"steps\": [\n    {\"type\": \"delay\", \"duration_ms\": 5},\n    {\"type\": \"delay\"}\n  ]\n}";
-        assert!(error_of(text).contains("t.json: step 2 (line 5)"), "{}", error_of(text));
+        assert!(
+            error_of(text).contains("t.json: step 2 (line 5)"),
+            "{}",
+            error_of(text)
+        );
     }
 
     #[test]
     fn compacting_only_drops_whitespace_between_tokens() {
-        assert_eq!(compact_json("{ \"a\" : [ 1 , 2 ],\n\t\"b\\\" c\": \" \\\\ \" }"), r#"{"a":[1,2],"b\" c":" \\ "}"#);
+        assert_eq!(
+            compact_json("{ \"a\" : [ 1 , 2 ],\n\t\"b\\\" c\": \" \\\\ \" }"),
+            r#"{"a":[1,2],"b\" c":" \\ "}"#
+        );
     }
 
     #[test]
@@ -312,7 +361,12 @@ mod tests {
         };
         let b = Trace {
             name: "b".into(),
-            steps: vec![Step::Delay(50), Step::Send("3".into()), Step::Delay(50), Step::Send("4".into())],
+            steps: vec![
+                Step::Delay(50),
+                Step::Send("3".into()),
+                Step::Delay(50),
+                Step::Send("4".into()),
+            ],
         };
         let merged = merge(&[a, b]);
         let order: Vec<(u64, &str, usize)> = merged
@@ -320,24 +374,41 @@ mod tests {
             .map(|item| (item.at_ms, item.json.as_str(), item.step))
             .collect();
         // At 100 ms, trace a comes before trace b.
-        assert_eq!(order, vec![(0, "1", 1), (50, "3", 2), (100, "2", 3), (100, "4", 4)]);
+        assert_eq!(
+            order,
+            vec![(0, "1", 1), (50, "3", 2), (100, "2", 3), (100, "4", 4)]
+        );
     }
 
     #[test]
     fn payloads_count_as_simulator_event_kinds() {
         let kind = |json: &str| Payload::read(json).kind();
-        assert_eq!(kind(r#"{"type":"vibration","device_id":"mm-2","value":1.3}"#), Some("sensor"));
-        assert_eq!(kind(r#"{"device_id":"mm-1","event":"pick","object":"dies"}"#), Some("action"));
-        assert_eq!(kind(r#"{"device_id":"mm-1","event":"move","source":"a","destination":"b"}"#), Some("move_command"));
+        assert_eq!(
+            kind(r#"{"type":"vibration","device_id":"mm-2","value":1.3}"#),
+            Some("sensor")
+        );
+        assert_eq!(
+            kind(r#"{"device_id":"mm-1","event":"pick","object":"dies"}"#),
+            Some("action")
+        );
+        assert_eq!(
+            kind(r#"{"device_id":"mm-1","event":"move","source":"a","destination":"b"}"#),
+            Some("move_command")
+        );
         assert_eq!(kind(r#"{"event":"dock","target":"a"}"#), Some("action"));
         assert_eq!(kind(r#"{"event":"undock","target":"a"}"#), Some("action"));
         assert_eq!(kind(r#"{"device_id":"mm-1"}"#), None);
         assert_eq!(kind("[1, 2]"), None);
 
-        let payload = Payload::read(r#"{"type":"lidar","device_id":"mm-1","value":0.25,"unit":"m","target":"stocker","timestamp_ms":1794236400000}"#);
+        let payload = Payload::read(
+            r#"{"type":"lidar","device_id":"mm-1","value":0.25,"unit":"m","target":"stocker","timestamp_ms":1794236400000}"#,
+        );
         assert!(payload.is_object);
         assert_eq!(payload.device_id.as_deref(), Some("mm-1"));
-        assert_eq!((payload.value, payload.timestamp_ms), (Some(0.25), Some(1_794_236_400_000)));
+        assert_eq!(
+            (payload.value, payload.timestamp_ms),
+            (Some(0.25), Some(1_794_236_400_000))
+        );
         assert!(!Payload::read("null").is_object);
     }
 }

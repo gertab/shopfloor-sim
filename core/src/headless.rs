@@ -132,7 +132,9 @@ mod tests {
 
     impl EventSink for MemorySink {
         fn write_batch(&mut self, messages: &[Message]) -> std::io::Result<()> {
-            let events = messages.iter().map(|message| serde_json::from_str(&message.json).unwrap());
+            let events = messages
+                .iter()
+                .map(|message| serde_json::from_str(&message.json).unwrap());
             self.0.lock().unwrap().extend(events);
             Ok(())
         }
@@ -204,9 +206,20 @@ mod tests {
                 run_fast(Arc::clone(&scenario), &run, &mut sinks).unwrap();
                 let events = events.lock().unwrap();
                 let failure = events.iter().find(|event| {
-                    matches!(&event.body, EventBody::Scene { state: SceneState::Failed, .. })
+                    matches!(
+                        &event.body,
+                        EventBody::Scene {
+                            state: SceneState::Failed,
+                            ..
+                        }
+                    )
                 });
-                assert!(failure.is_none(), "{}, scene '{}': {failure:?}", path.display(), scene.id);
+                assert!(
+                    failure.is_none(),
+                    "{}, scene '{}': {failure:?}",
+                    path.display(),
+                    scene.id
+                );
                 played += 1;
             }
         }

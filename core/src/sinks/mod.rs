@@ -82,7 +82,10 @@ pub struct SinkMonitor(Arc<Mutex<BTreeMap<String, String>>>);
 
 impl SinkMonitor {
     pub fn set(&self, sink: &str, status: String) {
-        self.0.lock().expect("sink monitor lock").insert(sink.to_string(), status);
+        self.0
+            .lock()
+            .expect("sink monitor lock")
+            .insert(sink.to_string(), status);
     }
 
     pub fn remove(&self, sink: &str) {

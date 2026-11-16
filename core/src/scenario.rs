@@ -236,8 +236,8 @@ impl MqttTopic {
     /// Whether a message of this `kind` about `device_id` goes to this topic. A message whose kind
     /// or device can't be told only matches topics without that filter.
     pub fn matches(&self, kind: Option<&str>, device_id: Option<&str>) -> bool {
-        let kind_ok = self.kinds.is_empty()
-            || kind.is_some_and(|kind| self.kinds.iter().any(|known| known == kind));
+        let kind_ok =
+            self.kinds.is_empty() || kind.is_some_and(|kind| self.kinds.iter().any(|known| known == kind));
         let entity_ok = self.entities.is_empty()
             || device_id.is_some_and(|device_id| self.entities.iter().any(|id| id == device_id));
         kind_ok && entity_ok
@@ -452,8 +452,7 @@ impl Scenario {
 pub fn load_scenario(path: &Path) -> anyhow::Result<Scenario> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read scenario file {}", path.display()))?;
-    parse_scenario(&text, Some(path))
-        .with_context(|| format!("Failed to load scenario {}", path.display()))
+    parse_scenario(&text, Some(path)).with_context(|| format!("Failed to load scenario {}", path.display()))
 }
 
 /// Parses and validates scenario TOML. `source_path` is used to resolve relative sink paths.
@@ -495,9 +494,7 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
         .chain(spec.sensors.keys())
     {
         if !valid_id(id) {
-            errors.push(format!(
-                "id '{id}' may only contain letters, digits, '_' and '-'"
-            ));
+            errors.push(format!("id '{id}' may only contain letters, digits, '_' and '-'"));
         }
         if !seen_ids.insert(id.as_str()) {
             errors.push(format!(
@@ -548,9 +545,10 @@ fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Sce
         if !floor_rect.contains_rect(footprint) {
             errors.push(format!("machines.{id} footprint lies outside the floor"));
         }
-        let dock = machine.dock.map(Vec2::from).unwrap_or_else(|| {
-            Vec2::new(position.x, position.y - size.y / 2.0 - DEFAULT_DOCK_GAP_M)
-        });
+        let dock = machine
+            .dock
+            .map(Vec2::from)
+            .unwrap_or_else(|| Vec2::new(position.x, position.y - size.y / 2.0 - DEFAULT_DOCK_GAP_M));
         if !floor_rect.inset(largest_radius).contains(dock) {
             errors.push(format!(
                 "machines.{id}.dock ({:.2}, {:.2}) is not reachable (outside the floor, \
@@ -831,7 +829,15 @@ fn collect_mounted_sensors(
                  (a mounted sensor is where its host is)"
             ));
         }
-        sensors.push(resolve_sensor(id.clone(), name, host, host_kind, spec, sim, errors));
+        sensors.push(resolve_sensor(
+            id.clone(),
+            name,
+            host,
+            host_kind,
+            spec,
+            sim,
+            errors,
+        ));
         ids.push(id);
     }
     ids
@@ -986,9 +992,7 @@ mod tests {
 
     #[test]
     fn rejects_shared_ids_between_machines_and_mms() {
-        let text = format!(
-            "{MINIMAL}\n[mobile_manipulators.machine2]\nstart = [5.0, 1.0]\n"
-        );
+        let text = format!("{MINIMAL}\n[mobile_manipulators.machine2]\nstart = [5.0, 1.0]\n");
         assert!(errors_of(&text).contains("id 'machine2' is used more than once"));
     }
 
@@ -999,7 +1003,10 @@ mod tests {
             .replace("period_ms = 500", "period_ms = 5");
         let errors = errors_of(&text);
         assert!(errors.contains("default 5 is outside range"), "{errors}");
-        assert!(errors.contains("period_ms (5) must be >= sim.tick_ms (20)"), "{errors}");
+        assert!(
+            errors.contains("period_ms (5) must be >= sim.tick_ms (20)"),
+            "{errors}"
+        );
     }
 
     #[test]
@@ -1009,7 +1016,10 @@ mod tests {
             .replace("position = [8.0, 4.5]", "position = [9.5, 4.5]");
         let errors = errors_of(&text);
         assert!(errors.contains("unknown machine 'machine9'"), "{errors}");
-        assert!(errors.contains("machines.machine2 footprint lies outside"), "{errors}");
+        assert!(
+            errors.contains("machines.machine2 footprint lies outside"),
+            "{errors}"
+        );
     }
 
     #[test]
@@ -1116,13 +1126,22 @@ entities = [\"mm1\"]
         let cases = [
             (format!("broker = \"localhost:99999\"\n{topic}"), "invalid port"),
             (format!("broker = \"mqtt://\"\n{topic}"), "not a broker address"),
-            (format!("broker = \"localhost\"\nqos = 3\n{topic}"), "qos must be 0, 1 or 2"),
-            ("broker = \"localhost\"\n".to_string(), "must list at least one topic"),
+            (
+                format!("broker = \"localhost\"\nqos = 3\n{topic}"),
+                "qos must be 0, 1 or 2",
+            ),
+            (
+                "broker = \"localhost\"\n".to_string(),
+                "must list at least one topic",
+            ),
             (
                 "broker = \"localhost\"\n[[output.sinks.m.topics]]\ntopic = \"a/#\"\n".to_string(),
                 "'a/#' contains a wildcard",
             ),
-            (format!("broker = \"localhost\"\n{topic}{topic}"), "'t' is listed more than once"),
+            (
+                format!("broker = \"localhost\"\n{topic}{topic}"),
+                "'t' is listed more than once",
+            ),
             (
                 format!("broker = \"localhost\"\n{topic}kinds = [\"sensors\"]\n"),
                 "unknown event kind 'sensors'",
@@ -1142,8 +1161,14 @@ entities = [\"mm1\"]
     #[test]
     fn parses_broker_addresses() {
         assert_eq!(parse_broker("localhost"), Ok(("localhost".into(), 1883)));
-        assert_eq!(parse_broker("mqtt://10.0.0.5:1884"), Ok(("10.0.0.5".into(), 1884)));
-        assert_eq!(parse_broker("broker.local:8883"), Ok(("broker.local".into(), 8883)));
+        assert_eq!(
+            parse_broker("mqtt://10.0.0.5:1884"),
+            Ok(("10.0.0.5".into(), 1884))
+        );
+        assert_eq!(
+            parse_broker("broker.local:8883"),
+            Ok(("broker.local".into(), 8883))
+        );
         assert!(parse_broker("localhost:0").is_err());
         assert!(parse_broker("").is_err());
     }
@@ -1152,7 +1177,9 @@ entities = [\"mm1\"]
     fn machine_docked_at_uses_tolerance() {
         let scenario = parse_scenario(MINIMAL, None).unwrap();
         assert_eq!(
-            scenario.machine_docked_at(Vec2::new(2.1, 3.6)).map(|m| m.id.as_str()),
+            scenario
+                .machine_docked_at(Vec2::new(2.1, 3.6))
+                .map(|m| m.id.as_str()),
             Some("machine1")
         );
         assert!(scenario.machine_docked_at(Vec2::new(5.0, 3.5)).is_none());
@@ -1207,8 +1234,18 @@ entities = [\"mm1\"]
         );
 
         let errors = errors_of(&format!("{MINIMAL}\n[replay]\ntraces = []\n"));
-        assert!(errors.contains("replay.traces must list at least one trace file"), "{errors}");
-        let error = format!("{:#}", parse_scenario(&format!("{MINIMAL}\n[replay]\ntraces = [\"a\"]\nformat = \"xml\"\n"), None).unwrap_err());
+        assert!(
+            errors.contains("replay.traces must list at least one trace file"),
+            "{errors}"
+        );
+        let error = format!(
+            "{:#}",
+            parse_scenario(
+                &format!("{MINIMAL}\n[replay]\ntraces = [\"a\"]\nformat = \"xml\"\n"),
+                None
+            )
+            .unwrap_err()
+        );
         assert!(error.contains("unknown variant `xml`"), "{error}");
     }
 
@@ -1231,7 +1268,10 @@ entities = [\"mm1\"]
             }
         }
         let mut count = 0;
-        load_all(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../scenarios"), &mut count);
+        load_all(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../scenarios"),
+            &mut count,
+        );
         assert!(count >= 7, "found {count} scenarios");
     }
 
@@ -1265,10 +1305,22 @@ entities = [\"mm1\"]
         )
         .replace("period_ms = 500", "period_ms = 500\nposition = [1.0, 1.0]");
         let errors = errors_of(&text);
-        assert!(errors.contains("sensor 'nowhere': free-standing sensors need a `position"), "{errors}");
-        assert!(errors.contains("sensor 'outside': position (11.00, 1.00) is outside the floor"), "{errors}");
-        assert!(errors.contains("id 'machine1' is used more than once"), "{errors}");
-        assert!(errors.contains("sensor 'mm1.vibration': `position` is only for free-standing"), "{errors}");
+        assert!(
+            errors.contains("sensor 'nowhere': free-standing sensors need a `position"),
+            "{errors}"
+        );
+        assert!(
+            errors.contains("sensor 'outside': position (11.00, 1.00) is outside the floor"),
+            "{errors}"
+        );
+        assert!(
+            errors.contains("id 'machine1' is used more than once"),
+            "{errors}"
+        );
+        assert!(
+            errors.contains("sensor 'mm1.vibration': `position` is only for free-standing"),
+            "{errors}"
+        );
     }
 
     #[test]

@@ -12,15 +12,12 @@
 
 use crate::command::{CommandEnvelope, Control, Origin, SimCommand, Target};
 use crate::event::{
-    DockEvent, EventBody, Lifecycle, MoveEvent, Point, SCHEMA_VERSION, SceneState, SimEvent,
-    UndockEvent,
+    DockEvent, EventBody, Lifecycle, MoveEvent, Point, SCHEMA_VERSION, SceneState, SimEvent, UndockEvent,
 };
 use crate::geometry::{Vec2, path_length, round_to};
 use crate::motion::{PathPlanner, StraightLine};
 use crate::scenario::{HostKind, MmDef, Scenario};
-use crate::scene::{
-    Repeat, ScenePlayer, SceneStatus, Step, TrackStatus, Wait, format_seconds,
-};
+use crate::scene::{Repeat, ScenePlayer, SceneStatus, Step, TrackStatus, Wait, format_seconds};
 use anyhow::{anyhow, bail};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
@@ -176,11 +173,9 @@ impl Engine {
                         .expect("validated: mounted sensors have a host")
                         .position,
                 ),
-                HostKind::Floor => SensorAnchor::Fixed(
-                    sensor
-                        .position
-                        .expect("validated: floor sensors have a position"),
-                ),
+                HostKind::Floor => {
+                    SensorAnchor::Fixed(sensor.position.expect("validated: floor sensors have a position"))
+                }
             })
             .collect();
         let mut engine = Self {
@@ -261,9 +256,7 @@ impl Engine {
             SimCommand::SetSensorPaused { sensor, paused } => {
                 self.set_sensor(&sensor, None, None, Some(paused), origin)?
             }
-            SimCommand::Perform { mm, action, object } => {
-                self.perform(&mm, &action, object, origin)?
-            }
+            SimCommand::Perform { mm, action, object } => self.perform(&mm, &action, object, origin)?,
         };
         Ok(self.events(ts, bodies))
     }
@@ -325,12 +318,7 @@ impl Engine {
             }
         }
 
-        for ((def, sensor), anchor) in scenario
-            .sensors
-            .iter()
-            .zip(&mut self.sensors)
-            .zip(&self.anchors)
-        {
+        for ((def, sensor), anchor) in scenario.sensors.iter().zip(&mut self.sensors).zip(&self.anchors) {
             if now < sensor.next_due_ms {
                 continue;
             }
@@ -614,12 +602,7 @@ impl Engine {
             .collect();
     }
 
-    fn move_to(
-        &mut self,
-        mm_id: &str,
-        target: Target,
-        origin: Origin,
-    ) -> anyhow::Result<Vec<EventBody>> {
+    fn move_to(&mut self, mm_id: &str, target: Target, origin: Origin) -> anyhow::Result<Vec<EventBody>> {
         let scenario = Arc::clone(&self.scenario);
         let index = self.mm_index(mm_id)?;
         let def = &scenario.mobile_manipulators[index];
@@ -850,7 +833,12 @@ impl Engine {
         self.scenario.mm_index(mm_id).ok_or_else(|| {
             anyhow!(
                 "Unknown mobile manipulator '{mm_id}' (known: {})",
-                known(self.scenario.mobile_manipulators.iter().map(|m: &MmDef| m.id.as_str()))
+                known(
+                    self.scenario
+                        .mobile_manipulators
+                        .iter()
+                        .map(|m: &MmDef| m.id.as_str())
+                )
             )
         })
     }

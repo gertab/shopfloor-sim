@@ -266,8 +266,15 @@ mod tests {
         assert_eq!(parsed, event, "round trip");
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["kind"], event.kind());
-        assert!(EVENT_KINDS.contains(&event.kind()), "{} is missing from EVENT_KINDS", event.kind());
-        assert_eq!(value.get("device_id").and_then(|id| id.as_str()), event.device_id());
+        assert!(
+            EVENT_KINDS.contains(&event.kind()),
+            "{} is missing from EVENT_KINDS",
+            event.kind()
+        );
+        assert_eq!(
+            value.get("device_id").and_then(|id| id.as_str()),
+            event.device_id()
+        );
     }
 
     #[test]

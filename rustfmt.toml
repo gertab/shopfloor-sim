@@ -1,0 +1,2 @@
+# `cargo fmt` formats the workspace with these settings (CI checks it).
+max_width = 110
