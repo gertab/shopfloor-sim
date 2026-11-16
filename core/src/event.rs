@@ -9,6 +9,7 @@
 
 use crate::command::Origin;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 pub const SCHEMA_VERSION: u32 = 2;
 
@@ -18,7 +19,8 @@ pub(crate) const HEADING_DECIMALS: i32 = 4;
 /// Decimals kept in sensor values.
 pub(crate) const VALUE_DECIMALS: i32 = 6;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct SimEvent {
     /// Schema version.
     pub v: u32,
@@ -32,7 +34,8 @@ pub struct SimEvent {
     pub body: EventBody,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventBody {
     /// A moving MM's pose, every `position_interval_ms`, plus once on arrival.
@@ -152,34 +155,39 @@ pub enum EventBody {
 }
 
 /// A point on the floor.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
 }
 
 /// The `event` of a `move_command`: always `"move"`, as in the traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum MoveEvent {
     Move,
 }
 
 /// The `event` of an `undock`: always `"undock"`, as in the traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum UndockEvent {
     Undock,
 }
 
 /// The `event` of a `dock`: always `"dock"`, as in the traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum DockEvent {
     Dock,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum SceneState {
     Started,
@@ -192,7 +200,8 @@ pub enum SceneState {
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
     Started,

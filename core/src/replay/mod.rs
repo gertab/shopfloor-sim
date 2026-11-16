@@ -28,12 +28,14 @@ mod track;
 pub use checks::Finding;
 use checks::{Findings, check_payloads, check_timestamps};
 use track::{Sample, Track, build_track};
+use ts_rs::TS;
 
 /// Why nothing can be done by hand during a replay.
 pub const READ_ONLY: &str = "Replaying a trace: manual control is off";
 
 /// What a replayed payload looks like on the sinks.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, rename = "ReplayFormat")]
 #[serde(rename_all = "snake_case")]
 pub enum Format {
     /// As written in the trace (compacted to one line), exactly what Liminal Desk sends.
@@ -51,7 +53,8 @@ pub struct ReplayOptions {
 }
 
 /// Progress of a replay, for the UI.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct ReplayStatus {
     pub traces: Vec<String>,
     pub format: Format,

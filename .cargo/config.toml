@@ -1,0 +1,5 @@
+[env]
+# `cargo test` regenerates the app's TypeScript types from the Rust ones (ts-rs).
+TS_RS_EXPORT_DIR = { value = "gui/src/bindings", relative = true }
+# u64 fields are plain JSON numbers, not bigint.
+TS_RS_LARGE_INT = "number"

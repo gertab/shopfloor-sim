@@ -4,8 +4,10 @@
 //! tagged with their [`Origin`]. A scene file is just a list of timed `SimCommand`s.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SimCommand {
     /// Send an MM somewhere. Replaces any move in progress.
@@ -30,7 +32,8 @@ pub enum SimCommand {
 }
 
 /// JSON: `{"point": {"x": 1.0, "y": 2.0}}` or `{"machine": "machine2"}`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Target {
     Point {
@@ -42,7 +45,8 @@ pub enum Target {
 }
 
 /// Who issued a command. Carried into the events it causes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
     Ui,
@@ -63,7 +67,8 @@ impl CommandEnvelope {
 }
 
 /// Engine control (not part of scenes). JSON: `"pause"`, `{"play_scene": "production"}`, ...
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Control {
     Pause,

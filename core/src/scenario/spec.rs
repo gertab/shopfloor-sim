@@ -6,6 +6,7 @@ use crate::scene::SceneSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,7 +37,8 @@ pub struct ScenarioSpec {
 }
 
 /// `[replay]`: the traces to play on this layout, and how.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ReplaySettings {
     /// Trace files, played side by side. Relative paths are resolved against the scenario file.
@@ -50,7 +52,8 @@ pub struct ReplaySettings {
     pub positions: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct SimSettings {
     /// Fixed engine step. Sim time advances by exactly this much per tick.

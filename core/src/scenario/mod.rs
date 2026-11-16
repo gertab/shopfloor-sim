@@ -8,6 +8,7 @@ use crate::scene::SceneDef;
 use anyhow::Context;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use ts_rs::TS;
 
 mod outputs;
 mod resolve;
@@ -22,7 +23,8 @@ pub use spec::{
     ActionSpec, FloorSpec, MachineSpec, MmSpec, ReplaySettings, ScenarioSpec, SensorSpec, SimSettings,
 };
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct Scenario {
     pub name: String,
     pub source_path: Option<PathBuf>,
@@ -38,7 +40,8 @@ pub struct Scenario {
     pub replay: Option<ReplaySettings>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct Floor {
     pub width_m: f64,
     pub height_m: f64,
@@ -54,7 +57,8 @@ impl Floor {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct MachineDef {
     pub id: String,
     pub label: String,
@@ -65,7 +69,8 @@ pub struct MachineDef {
     pub sensors: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct MmDef {
     pub id: String,
     pub label: String,
@@ -79,7 +84,8 @@ pub struct MmDef {
     pub sensors: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct ActionDef {
     pub id: String,
     pub label: String,
@@ -87,7 +93,8 @@ pub struct ActionDef {
     pub allowed_while_moving: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum HostKind {
     Machine,
@@ -96,7 +103,8 @@ pub enum HostKind {
     Floor,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct SensorDef {
     /// `<host>.<name>` for mounted sensors (e.g. `mm1.vibration`); just `<name>` for floor sensors.
     pub id: String,

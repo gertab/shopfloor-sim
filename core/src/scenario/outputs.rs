@@ -6,6 +6,7 @@ use crate::event::EVENT_KINDS;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
+use ts_rs::TS;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,7 +28,8 @@ impl Default for OutputSpec {
 }
 
 /// Where the event stream goes, besides the UI.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SinkKind {
     /// One JSON line per event on stdout.
@@ -64,7 +66,8 @@ impl SinkKind {
 }
 
 /// An MQTT topic and the events it carries. An empty filter matches everything.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct MqttTopic {
     pub topic: String,
@@ -111,13 +114,15 @@ pub(crate) fn parse_broker(broker: &str) -> Result<(String, u16), String> {
     Ok((host.to_string(), port))
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct OutputSettings {
     pub position_interval_ms: u64,
     pub sinks: Vec<SinkDef>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct SinkDef {
     pub name: String,
     #[serde(flatten)]

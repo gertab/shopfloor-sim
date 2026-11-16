@@ -1,280 +1,36 @@
-// Hand-written mirror of the Rust types in core/src (scenario.rs, engine.rs, event.rs, command.rs).
+// The Rust types the app receives, generated from core/src by ts-rs into ./bindings (`cargo test`
+// regenerates them; don't edit those files). Below them, the few types only the app has.
 
-export type Vec2 = { x: number; y: number };
+import type { SimEvent } from "./bindings/SimEvent";
 
-// --- Static layout (scenario.rs: Scenario) -----------------------------------------------------
-
-/** An MQTT topic and the events it carries. Empty filters match everything. */
-export interface MqttTopic {
-  topic: string;
-  kinds: EventKind[];
-  entities: string[];
-}
-
-export type SinkDef =
-  | { name: string; type: "stdout" }
-  | { name: string; type: "jsonl"; path: string; append: boolean }
-  | { name: string; type: "tcp"; bind: string }
-  | { name: string; type: "mqtt"; broker: string; topics: MqttTopic[]; qos: number; client_id: string | null };
-
-export interface MachineDef {
-  id: string;
-  label: string;
-  position: Vec2;
-  size: Vec2;
-  dock: Vec2;
-  sensors: string[];
-}
-
-export interface MmDef {
-  id: string;
-  label: string;
-  start: Vec2;
-  start_at: string | null;
-  start_heading_rad: number;
-  max_speed_mps: number;
-  radius_m: number;
-  /** Ids of the actions this MM can perform. */
-  actions: string[];
-  sensors: string[];
-}
-
-export interface ActionDef {
-  id: string;
-  label: string;
-  requires_machine: boolean;
-  allowed_while_moving: boolean;
-}
-
-/** "floor" = a free-standing sensor at a fixed position; it is its own entity. */
-export type HostKind = "machine" | "mobile_manipulator" | "floor";
-
-export interface SensorDef {
-  id: string;
-  name: string;
-  host: string;
-  host_kind: HostKind;
-  kind: string;
-  label: string;
-  unit: string;
-  default: number;
-  min: number;
-  max: number;
-  period_ms: number;
-  noise_std: number;
-  /** Fixed position of a floor sensor; null for mounted sensors. */
-  position: Vec2 | null;
-}
-
-export interface Scenario {
-  name: string;
-  source_path: string | null;
-  sim: { tick_ms: number; seed: number; dock_tolerance_m: number; start_paused: boolean };
-  floor: { width_m: number; height_m: number; grid_m: number };
-  machines: MachineDef[];
-  mobile_manipulators: MmDef[];
-  sensors: SensorDef[];
-  actions: ActionDef[];
-  scenes: SceneDef[];
-  output: { position_interval_ms: number; sinks: SinkDef[] };
-  /** Liminal Desk traces this scenario replays when loaded (paths resolved); null: it simulates. */
-  replay: ReplaySettings | null;
-}
-
-// --- Trace replay (replay.rs) -------------------------------------------------------------------
-
-/** "payload": each payload as written. "envelope": with v, seq, sim_ms and kind in front. */
-export type ReplayFormat = "payload" | "envelope";
-
-export interface ReplaySettings {
-  traces: string[];
-  format: ReplayFormat;
-  positions: boolean;
-}
-
-export interface ReplayStatus {
-  traces: string[];
-  format: ReplayFormat;
-  positions: boolean;
-  /** Payloads sent so far, of `total`. */
-  sent: number;
-  total: number;
-  duration_ms: number;
-  done: boolean;
-}
-
-// --- Scenes (scene.rs) --------------------------------------------------------------------------
-
-export type Repeat = "once" | "forever" | { times: number };
-
-export type SceneStep = { command: SimCommand } | { wait_ms: number } | { wait_idle: string };
-
-export interface SceneDef {
-  id: string;
-  label: string;
-  repeat: Repeat;
-  tracks: { name: string; steps: SceneStep[] }[];
-}
-
-export interface TrackStatus {
-  name: string;
-  /** 1-based index of the step being waited on (equals `steps` when done). */
-  step: number;
-  steps: number;
-  /** What the track waits on, e.g. "wait 1.5 s (0.4 s left)"; null when done. */
-  current: string | null;
-  done: boolean;
-}
-
-export interface SceneStatus {
-  id: string;
-  label: string;
-  iteration: number;
-  tracks: TrackStatus[];
-}
-
-// --- Dynamic state (engine.rs: WorldState) ------------------------------------------------------
-
-export interface Place {
-  x: number;
-  y: number;
-  at: string | null;
-}
-
-export interface MotionView {
-  command_id: number;
-  target: Place;
-  remaining_m: number;
-  eta_ms: number;
-}
-
-export interface MmView {
-  id: string;
-  x: number;
-  y: number;
-  heading_rad: number;
-  speed_mps: number;
-  at: string | null;
-  motion: MotionView | null;
-  /** This MM's actions and whether each can be performed right now (rules live in the engine). */
-  actions: ActionAvailability[];
-}
-
-export interface ActionAvailability {
-  id: string;
-  available: boolean;
-  reason: string | null;
-}
-
-export interface SensorView {
-  id: string;
-  setpoint: number;
-  noise_std: number;
-  paused: boolean;
-  last_value: number | null;
-  last_ms: number | null;
-}
-
-export interface WorldState {
-  sim_ms: number;
-  paused: boolean;
-  mobile_manipulators: MmView[];
-  sensors: SensorView[];
-  /** The playing scene, if any. */
-  scene: SceneStatus | null;
-  /** Set while a trace is replayed (read-only: no manual control). */
-  replay: ReplayStatus | null;
-}
-
-// --- Output events (event.rs: SimEvent) — the consumer contract ---------------------------------
-
-export type Origin = "ui" | "scene" | "api";
-
-interface Envelope {
-  v: number;
-  seq: number;
-  timestamp_ms: number;
-  sim_ms: number;
-}
-
-export type SimEvent = Envelope &
-  (
-    | { kind: "position"; device_id: string; x: number; y: number; heading_rad: number; speed_mps: number }
-    | {
-        kind: "move_command";
-        device_id: string;
-        event: "move";
-        source: string | null;
-        destination: string | null;
-        command_id: number;
-        origin: Origin;
-        from: Vec2;
-        to: Vec2;
-        distance_m: number;
-        eta_ms: number;
-        replaces: number | null;
-      }
-    | { kind: "arrived"; device_id: string; command_id: number; x: number; y: number; at: string | null }
-    | {
-        kind: "stopped";
-        device_id: string;
-        command_id: number;
-        x: number;
-        y: number;
-        at: string | null;
-        origin: Origin;
-      }
-    | {
-        kind: "undock" | "dock";
-        device_id: string;
-        event: "undock" | "dock";
-        target: string;
-        command_id: number;
-        x: number;
-        y: number;
-      }
-    | {
-        kind: "sensor";
-        sensor: string;
-        device_id: string;
-        type: string;
-        value: number;
-        unit: string;
-        x: number;
-        y: number;
-      }
-    | {
-        kind: "sensor_set";
-        sensor: string;
-        device_id: string;
-        type: string;
-        setpoint: number;
-        noise_std: number;
-        previous_setpoint: number;
-        paused: boolean;
-        origin: Origin;
-      }
-    | {
-        kind: "action";
-        device_id: string;
-        /** The action's id, e.g. "pick". */
-        event: string;
-        object: string | null;
-        command_id: number;
-        x: number;
-        y: number;
-        at: string | null;
-        origin: Origin;
-      }
-    | { kind: "sim"; state: "started" | "paused" | "resumed" | "reset"; scenario: string }
-    | {
-        kind: "scene";
-        scene: string;
-        state: "started" | "restarted" | "finished" | "stopped" | "failed";
-        iteration: number;
-        error: string | null;
-      }
-  );
+export type { ActionAvailability } from "./bindings/ActionAvailability";
+export type { ActionDef } from "./bindings/ActionDef";
+export type { Control } from "./bindings/Control";
+export type { HostKind } from "./bindings/HostKind";
+export type { MachineDef } from "./bindings/MachineDef";
+export type { MmDef } from "./bindings/MmDef";
+export type { MmView } from "./bindings/MmView";
+export type { MotionView } from "./bindings/MotionView";
+export type { MqttTopic } from "./bindings/MqttTopic";
+export type { Origin } from "./bindings/Origin";
+export type { Place } from "./bindings/Place";
+export type { Repeat } from "./bindings/Repeat";
+export type { ReplayFormat } from "./bindings/ReplayFormat";
+export type { ReplaySettings } from "./bindings/ReplaySettings";
+export type { ReplayStatus } from "./bindings/ReplayStatus";
+export type { Scenario } from "./bindings/Scenario";
+export type { SceneDef } from "./bindings/SceneDef";
+export type { SceneStatus } from "./bindings/SceneStatus";
+export type { SceneStep } from "./bindings/SceneStep";
+export type { SensorDef } from "./bindings/SensorDef";
+export type { SensorView } from "./bindings/SensorView";
+export type { SimCommand } from "./bindings/SimCommand";
+export type { SimEvent } from "./bindings/SimEvent";
+export type { SinkDef } from "./bindings/SinkDef";
+export type { Target } from "./bindings/Target";
+export type { TrackStatus } from "./bindings/TrackStatus";
+export type { Vec2 } from "./bindings/Vec2";
+export type { WorldState } from "./bindings/WorldState";
 
 export type EventKind = SimEvent["kind"];
 
@@ -289,17 +45,3 @@ export interface LogEntry {
   device_id: string | null;
   data: Record<string, unknown>;
 }
-
-// --- Commands (command.rs) ---------------------------------------------------------------------
-
-export type Target = { point: Vec2 } | { machine: string };
-
-export type SimCommand =
-  | { type: "move_to"; mm: string; target: Target }
-  | { type: "stop"; mm: string }
-  | { type: "set_sensor"; sensor: string; value: number }
-  | { type: "set_sensor_noise"; sensor: string; std: number }
-  | { type: "set_sensor_paused"; sensor: string; paused: boolean }
-  | { type: "perform"; mm: string; action: string; object?: string };
-
-export type Control = "pause" | "resume" | "reset" | "stop_scene" | { play_scene: string };

@@ -135,6 +135,16 @@ export function useSimulation(): Simulation {
     setLastActions({});
   }, []);
 
+  /** Runs `action`; what it throws becomes the error banner (and the result `undefined`). */
+  const reportErrors = useCallback(async <T>(action: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await action();
+    } catch (caught) {
+      setError(String(caught));
+      return undefined;
+    }
+  }, []);
+
   const load = useCallback(
     async (path?: string) => {
       setLoading(true);
@@ -142,65 +152,50 @@ export function useSimulation(): Simulation {
       clearEvents();
       setFinishedReplay(null);
       replayLeftRef.current = true;
-      try {
+      await reportErrors(async () => {
         setScenario(await api.loadScenario(path));
         setWorld(await api.getState());
         setError(null);
-      } catch (loadError) {
-        setError(String(loadError));
-      } finally {
-        setLoading(false);
-      }
+      });
+      setLoading(false);
     },
-    [clearEvents],
+    [clearEvents, reportErrors],
   );
 
   const pickAndLoad = useCallback(async () => {
-    try {
-      const path = await api.pickScenarioFile();
-      if (path) {
-        await load(path);
-      }
-    } catch (pickError) {
-      setError(String(pickError));
+    const path = await reportErrors(() => api.pickScenarioFile());
+    if (path) {
+      await load(path);
     }
-  }, [load]);
+  }, [load, reportErrors]);
 
-  const pickTraceFiles = useCallback(async () => {
-    try {
-      return await api.pickTraceFiles();
-    } catch (pickError) {
-      setError(String(pickError));
-      return null;
-    }
-  }, []);
+  const pickTraceFiles = useCallback(
+    async () => (await reportErrors(() => api.pickTraceFiles())) ?? null,
+    [reportErrors],
+  );
 
   const startReplay = useCallback(
     async (paths: string[], { envelope, positions }: ReplayChoice) => {
-      try {
-        clearEvents();
-        setFinishedReplay(null);
-        replayLeftRef.current = false;
+      clearEvents();
+      setFinishedReplay(null);
+      replayLeftRef.current = false;
+      await reportErrors(async () => {
         const warnings = await api.startReplay(paths, envelope, positions);
         setWorld(await api.getState());
         setError(warningsText(warnings));
-      } catch (replayError) {
-        setError(String(replayError));
-      }
+      });
     },
-    [clearEvents],
+    [clearEvents, reportErrors],
   );
 
   const stopReplay = useCallback(async () => {
     replayLeftRef.current = true;
-    try {
-      clearEvents();
+    clearEvents();
+    await reportErrors(async () => {
       await api.stopReplay();
       setWorld(await api.getState());
-    } catch (stopError) {
-      setError(String(stopError));
-    }
-  }, [clearEvents]);
+    });
+  }, [clearEvents, reportErrors]);
 
   // A replay that has sent everything hands back to the simulation by itself.
   const replay = world?.replay ?? null;
@@ -210,21 +205,19 @@ export function useSimulation(): Simulation {
     void stopReplay().then(() => setFinishedReplay(finished));
   }, [replay, stopReplay]);
 
-  const send = useCallback(async (command: SimCommand) => {
-    try {
-      await api.sendCommand(command);
-    } catch (commandError) {
-      setError(String(commandError));
-    }
-  }, []);
+  const send = useCallback(
+    async (command: SimCommand) => {
+      await reportErrors(() => api.sendCommand(command));
+    },
+    [reportErrors],
+  );
 
-  const control = useCallback(async (value: Control) => {
-    try {
-      await api.control(value);
-    } catch (controlError) {
-      setError(String(controlError));
-    }
-  }, []);
+  const control = useCallback(
+    async (value: Control) => {
+      await reportErrors(() => api.control(value));
+    },
+    [reportErrors],
+  );
 
   // Poll sink status (e.g. whether a consumer is connected over TCP).
   useEffect(() => {

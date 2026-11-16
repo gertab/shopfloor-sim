@@ -1,8 +1,10 @@
 //! Plane geometry in floor coordinates: metres, origin bottom-left, y up, heading 0 = +x (CCW positive).
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,

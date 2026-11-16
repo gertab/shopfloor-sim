@@ -10,6 +10,7 @@ use crate::geometry::Vec2;
 use crate::scenario::Scenario;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use ts_rs::TS;
 
 // ---------------------------------------------------------------------------------------------
 // File schema
@@ -88,7 +89,8 @@ pub struct SetSensorNoiseSpec {
 // Resolved model
 // ---------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Repeat {
     Once,
@@ -96,7 +98,8 @@ pub enum Repeat {
     Forever,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct SceneDef {
     pub id: String,
     pub label: String,
@@ -104,13 +107,15 @@ pub struct SceneDef {
     pub tracks: Vec<TrackDef>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
 pub struct TrackDef {
     pub name: String,
     pub steps: Vec<Step>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export, rename = "SceneStep")]
 #[serde(rename_all = "snake_case")]
 pub enum Step {
     Command(SimCommand),
@@ -375,7 +380,8 @@ impl ScenePlayer {
 }
 
 /// Progress of the playing scene, for the UI.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct SceneStatus {
     pub id: String,
     pub label: String,
@@ -383,7 +389,8 @@ pub struct SceneStatus {
     pub tracks: Vec<TrackStatus>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct TrackStatus {
     pub name: String,
     /// 1-based index of the step being waited on (equals `steps` when the track is done).

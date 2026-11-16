@@ -25,6 +25,7 @@ use rand::rngs::StdRng;
 use rand_distr::{Distribution, Normal};
 use serde::Serialize;
 use std::sync::Arc;
+use ts_rs::TS;
 
 /// Distances below this count as "already there" (metres).
 const ARRIVAL_EPS_M: f64 = 1e-9;
@@ -89,7 +90,8 @@ struct SensorState {
 }
 
 /// Dynamic world state for the UI (the static layout is the [`Scenario`]).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct WorldState {
     pub sim_ms: u64,
     pub paused: bool,
@@ -101,7 +103,8 @@ pub struct WorldState {
     pub replay: Option<crate::replay::ReplayStatus>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct MmView {
     pub id: String,
     pub x: f64,
@@ -115,7 +118,8 @@ pub struct MmView {
     pub actions: Vec<ActionAvailability>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct ActionAvailability {
     pub id: String,
     pub available: bool,
@@ -124,14 +128,16 @@ pub struct ActionAvailability {
 }
 
 /// A point on the floor, with the machine it is docked at (if any).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct Place {
     pub x: f64,
     pub y: f64,
     pub at: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct MotionView {
     pub command_id: u64,
     pub target: Place,
@@ -139,7 +145,8 @@ pub struct MotionView {
     pub eta_ms: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
 pub struct SensorView {
     pub id: String,
     pub setpoint: f64,
