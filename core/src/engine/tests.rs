@@ -1,6 +1,7 @@
 use super::*;
 use crate::event::{DockEvent, MoveEvent, Point, SceneState, UndockEvent};
 use crate::scenario::parse_scenario;
+use crate::scene::TrackStatus;
 
 const SCENARIO: &str = r#"
     name = "Engine test"
