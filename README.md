@@ -523,6 +523,8 @@ In the app, the **Replay** section at the top of the right-hand panel:
 - **Start replay** starts.
   - During the replay the section shows progress (time, payloads sent) and whether it's running, paused or done.
   - **Stop replay** goes back to simulating the same layout.
+  - Once the last payload has gone out, the app goes back to simulating the layout by itself. The section notes that
+    the replay finished, and keeps its traces and options for another run.
   - The toolbar's Pause and Reset act on the replay.
 - The log shows exactly what the outputs send.
 

@@ -1,11 +1,13 @@
-import { ChevronDown, ChevronRight, FileJson, Play, Square, X } from "lucide-react";
+import { CircleCheck, ChevronDown, ChevronRight, FileJson, Play, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { ReplayChoice } from "../../hooks/useSimulation";
+import type { FinishedReplay, ReplayChoice } from "../../hooks/useSimulation";
 import type { ReplayFormat, Scenario, WorldState } from "../../types";
 
 interface ReplayPanelProps {
   scenario: Scenario;
   world: WorldState | null;
+  /** The replay that last ran to its end, if any: noted above the settings. */
+  finished: FinishedReplay | null;
   /** Opens the file picker; resolves to the chosen trace files (null if cancelled). */
   onPickTraces: () => Promise<string[] | null>;
   onStart: (paths: string[], choice: ReplayChoice) => void;
@@ -24,7 +26,7 @@ const FORMAT_CAPTIONS: Record<ReplayFormat, string> = {
  * Replaying Liminal Desk traces on this layout: which traces and how (starting from the scenario's
  * [replay], if any), then progress. Folded away while the scenario names no traces.
  */
-export function ReplayPanel({ scenario, world, onPickTraces, onStart, onStop }: ReplayPanelProps) {
+export function ReplayPanel({ scenario, world, finished, onPickTraces, onStart, onStop }: ReplayPanelProps) {
   const status = world?.replay ?? null;
   const [open, setOpen] = useState(scenario.replay !== null);
   const [traces, setTraces] = useState<string[]>(scenario.replay?.traces ?? []);
@@ -98,12 +100,23 @@ export function ReplayPanel({ scenario, world, onPickTraces, onStart, onStop }: 
             <Square size={12} />
             Stop replay
           </button>
-          <p className="hint">Manual control is off. Pause and Reset in the toolbar act on the replay.</p>
+          <p className="hint">
+            Manual control is off. Pause and Reset in the toolbar act on the replay, and once everything is sent the
+            floor goes back to simulating.
+          </p>
         </div>
       )}
 
       {open && !status && (
         <div className="replay-body">
+          {finished && (
+            <div className="replay-note" title={finished.traces.join(", ")}>
+              <CircleCheck size={13} />
+              <span>
+                Last replay finished: {finished.total.toLocaleString()} payloads over {seconds(finished.duration_ms)}.
+              </span>
+            </div>
+          )}
           <p className="replay-intro">
             Plays Liminal Desk traces on this floor. Their payloads go to the outputs at their recorded
             times, exactly as written.

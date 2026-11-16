@@ -15,6 +15,13 @@ export interface LastAction {
   sim_ms: number;
 }
 
+/** What the last replay that ran to its end played. */
+export interface FinishedReplay {
+  traces: string[];
+  total: number;
+  duration_ms: number;
+}
+
 export interface ReplayChoice {
   envelope: boolean;
   positions: boolean;
@@ -48,6 +55,8 @@ export interface Simulation {
   lastActions: Record<string, LastAction>;
   /** Live status of sinks that report one (TCP connections), by sink name. */
   sinkStatus: Record<string, string>;
+  /** The replay that last ran to its end (the app then went back to simulating), if any. */
+  finishedReplay: FinishedReplay | null;
   error: string | null;
   loading: boolean;
   load: (path?: string) => Promise<void>;
@@ -73,7 +82,11 @@ export function useSimulation(): Simulation {
   const [sinkStatus, setSinkStatus] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [finishedReplay, setFinishedReplay] = useState<FinishedReplay | null>(null);
   const loadedOnceRef = useRef(false);
+  // Whether the current replay has already been left (stopped, or finished and handed back), so
+  // that a late "done" from it doesn't hand back twice.
+  const replayLeftRef = useRef(true);
 
   useEffect(() => {
     let disposed = false;
@@ -126,6 +139,8 @@ export function useSimulation(): Simulation {
       setLoading(true);
       // Clear first: the new run's opening events arrive while loadScenario is still resolving.
       clearEvents();
+      setFinishedReplay(null);
+      replayLeftRef.current = true;
       try {
         setScenario(await api.loadScenario(path));
         setWorld(await api.getState());
@@ -163,6 +178,8 @@ export function useSimulation(): Simulation {
     async (paths: string[], { envelope, positions }: ReplayChoice) => {
       try {
         clearEvents();
+        setFinishedReplay(null);
+        replayLeftRef.current = false;
         const warnings = await api.startReplay(paths, envelope, positions);
         setWorld(await api.getState());
         setError(warningsText(warnings));
@@ -174,6 +191,7 @@ export function useSimulation(): Simulation {
   );
 
   const stopReplay = useCallback(async () => {
+    replayLeftRef.current = true;
     try {
       clearEvents();
       await api.stopReplay();
@@ -182,6 +200,14 @@ export function useSimulation(): Simulation {
       setError(String(stopError));
     }
   }, [clearEvents]);
+
+  // A replay that has sent everything hands back to the simulation by itself.
+  const replay = world?.replay ?? null;
+  useEffect(() => {
+    if (!replay?.done || replayLeftRef.current) return;
+    const finished = { traces: replay.traces, total: replay.total, duration_ms: replay.duration_ms };
+    void stopReplay().then(() => setFinishedReplay(finished));
+  }, [replay, stopReplay]);
 
   const send = useCallback(async (command: SimCommand) => {
     try {
@@ -224,6 +250,7 @@ export function useSimulation(): Simulation {
     counts,
     lastActions,
     sinkStatus,
+    finishedReplay,
     error,
     loading,
     load,

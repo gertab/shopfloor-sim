@@ -502,6 +502,24 @@ h3 {
   margin-top: 10px;
 }
 
+.replay-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.replay-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 .replay-intro {
   margin: 0;
   font-size: 12px;

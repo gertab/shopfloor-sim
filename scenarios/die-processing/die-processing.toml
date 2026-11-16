@@ -17,6 +17,7 @@ name = "Die processing cell"
 tick_ms = 20
 seed = 11
 start_paused = true      # opens paused in the app: Resume (or Space) starts the clock
+dock_tolerance_m = 0.9   # an MM this close to a dock is "at" that machine
 
 [floor]
 width_m = 10.0

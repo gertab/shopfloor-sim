@@ -115,6 +115,7 @@ export default function App() {
             focus={focus}
             lastActions={sim.lastActions}
             readOnly={readOnly}
+            finishedReplay={sim.finishedReplay}
             onPickTraces={sim.pickTraceFiles}
             onStartReplay={(paths, choice) => void sim.startReplay(paths, choice)}
             onStopReplay={() => void sim.stopReplay()}

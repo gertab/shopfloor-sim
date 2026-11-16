@@ -2,7 +2,7 @@ import { Hand, Navigation, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { formatPoint, formatSimTime, formatValue, machineLabel, mmColor } from "../../format";
-import type { LastAction, ReplayChoice } from "../../hooks/useSimulation";
+import type { FinishedReplay, LastAction, ReplayChoice } from "../../hooks/useSimulation";
 import { ReplayPanel } from "../replay/ReplayPanel";
 import { ScenesPanel } from "../scenes/ScenesPanel";
 import type { Control, MmDef, MmView, Scenario, SensorDef, SensorView, SimCommand, WorldState } from "../../types";
@@ -19,6 +19,7 @@ interface ControlPanelProps {
   lastActions: Record<string, LastAction>;
   /** Why nothing can be done by hand right now (a trace replay), else null. */
   readOnly: string | null;
+  finishedReplay: FinishedReplay | null;
   onPickTraces: () => Promise<string[] | null>;
   onStartReplay: (paths: string[], choice: ReplayChoice) => void;
   onStopReplay: () => void;
@@ -35,6 +36,7 @@ export function ControlPanel({
   focus,
   lastActions,
   readOnly,
+  finishedReplay,
   onPickTraces,
   onStartReplay,
   onStopReplay,
@@ -52,6 +54,7 @@ export function ControlPanel({
       <ReplayPanel
         scenario={scenario}
         world={world}
+        finished={finishedReplay}
         onPickTraces={onPickTraces}
         onStart={onStartReplay}
         onStop={onStopReplay}
