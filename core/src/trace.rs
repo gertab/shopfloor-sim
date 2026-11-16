@@ -94,21 +94,23 @@ pub fn parse_trace(name: &str, text: &str) -> anyhow::Result<Trace> {
     }
     let mut steps = Vec::with_capacity(file.steps.len());
     for (index, raw) in file.steps.iter().enumerate() {
-        let at = format!("{name}: step {} (line {})", index + 1, line_of(text, raw.get()));
+        // Only worked out for an error: counting the lines up to every step would take time
+        // proportional to the square of the trace's length.
+        let at = || format!("{name}: step {} (line {})", index + 1, line_of(text, raw.get()));
         let spec: StepSpec = serde_json::from_str(raw.get()).map_err(|error| {
             // serde_json counts lines from the start of the step, so only its message is useful.
             let message = error.to_string();
             let message = message.split(" at line ").next().unwrap_or(&message).to_string();
-            anyhow!("{at}: {message}")
+            anyhow!("{}: {message}", at())
         })?;
         let step = match (spec.kind.as_str(), spec.payload, spec.duration_ms) {
             ("send", Some(payload), None) => Step::Send(compact_json(payload.get())),
-            ("send", None, _) => bail!("{at}: a send step needs a `payload`"),
-            ("send", Some(_), Some(_)) => bail!("{at}: a send step takes no `duration_ms`"),
+            ("send", None, _) => bail!("{}: a send step needs a `payload`", at()),
+            ("send", Some(_), Some(_)) => bail!("{}: a send step takes no `duration_ms`", at()),
             ("delay", None, Some(ms)) => Step::Delay(ms),
-            ("delay", _, None) => bail!("{at}: a delay step needs a `duration_ms`"),
-            ("delay", Some(_), Some(_)) => bail!("{at}: a delay step takes no `payload`"),
-            (other, ..) => bail!("{at}: type must be \"send\" or \"delay\" (got \"{other}\")"),
+            ("delay", _, None) => bail!("{}: a delay step needs a `duration_ms`", at()),
+            ("delay", Some(_), Some(_)) => bail!("{}: a delay step takes no `payload`", at()),
+            (other, ..) => bail!("{}: type must be \"send\" or \"delay\" (got \"{other}\")", at()),
         };
         steps.push(step);
     }
