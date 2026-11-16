@@ -494,15 +494,18 @@ How a replay works:
   - Several traces play side by side, merged on their delays. Ties go in the order the traces were given.
   - The payloads' own `timestamp_ms` values are sent unchanged.
 - **Routing.**
-  - A payload counts as a simulator event kind: `event: "move"` is a `move_command`, `"dock"`/`"undock"` are
-    themselves, any other `event` is an `action`, and a `type` without an `event` is a `sensor`.
+  - A payload counts as a simulator event kind: `event: "move"` is a `move_command`, any other `event` (`pick`,
+    `place`, `dock`, `undock`, …) is an `action`, and a `type` without an `event` is a `sensor`.
   - Its `device_id` is its device.
   - MQTT topics filter on these two, so `kinds = ["sensor"]` gets the sensor payloads, without adding anything to them.
 - **The picture.**
-  - The MMs follow their `undock`, `move` and `dock` events on the scenario's layout:
-    - an `undock` backs the MM 1 m away from the dock, leaning 30° to one side, so two MMs waiting at one machine stand
-      apart;
-    - a `move` reaches the destination at the MM's next event.
+  - The MMs move on the scenario's layout:
+    - an `undock` glides the MM out over a second to an approach point 1 m from the dock. It leans to one side,
+      alternating by MM, so two MMs waiting at one machine stand apart;
+    - a `move` drives it to the destination's approach point, arriving at its next event;
+    - a `dock` glides it into the dock over a second.
+  - Every event other than `move` (`pick`, `place`, `dock`, `undock`, …) is an action: its name flashes above the MM
+    and it shows as the MM's last action. Of the actions, only `undock` and `dock` move the MM.
   - Sensor payloads update the sensor with the same `device_id` (its host) and `type` (its kind).
 - **Read-only.**
   - No moves, actions, sensor changes or scenes are possible: the app disables them, and the backend refuses them.

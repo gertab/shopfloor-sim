@@ -226,7 +226,7 @@ function MmCard({ def, view, color, scenario, selected, lastAction, readOnly, on
         <div className="muted small last-action">
           last action: {lastAction.event}
           {lastAction.at
-            ? ` at ${machineLabel(scenario, lastAction.at)}`
+            ? ` ${lastAction.event === "undock" ? "from" : "at"} ${machineLabel(scenario, lastAction.at)}`
             : lastAction.x !== null && lastAction.y !== null
               ? ` at ${formatPoint(lastAction.x, lastAction.y)}`
               : ""}{" "}

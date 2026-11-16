@@ -32,7 +32,8 @@ function lastActionOf(entry: LogEntry): LastAction {
   return {
     seq: entry.seq,
     event: typeof data.event === "string" ? data.event : "?",
-    at: typeof data.at === "string" ? data.at : null,
+    // Replayed dock/undock payloads name their machine as `target`.
+    at: typeof data.at === "string" ? data.at : typeof data.target === "string" ? data.target : null,
     x: typeof data.x === "number" ? data.x : null,
     y: typeof data.y === "number" ? data.y : null,
     sim_ms: entry.sim_ms,

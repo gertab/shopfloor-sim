@@ -120,9 +120,12 @@ export function describeEntry(entry: LogEntry, scenario: Scenario | null): strin
     case "sensor_set":
       return `${str(data, "sensor")} setpoint ${formatValue(num(data, "previous_setpoint"))} -> ${formatValue(num(data, "setpoint"))}, noise σ ${formatValue(num(data, "noise_std"))}${data.paused ? ", paused" : ""}${by}`;
     case "action": {
+      const event = str(data, "event") ?? "?";
       const object = str(data, "object");
-      const at = str(data, "at");
-      return `${ref}${str(data, "event") ?? "?"}${object ? ` ${object}` : ""}${at || here ? ` at ${describePlace(scenario, at, here)}` : ""}${by}`;
+      // Replayed dock/undock payloads name their machine as `target`.
+      const at = str(data, "at") ?? str(data, "target");
+      const preposition = event === "undock" ? "from" : "at";
+      return `${ref}${event}${object ? ` ${object}` : ""}${at || here ? ` ${preposition} ${describePlace(scenario, at, here)}` : ""}${by}`;
     }
     case "scene": {
       const error = str(data, "error");

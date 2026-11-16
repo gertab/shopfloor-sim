@@ -131,10 +131,10 @@ fn the_payload_format_sends_exactly_the_payloads_at_their_times() {
         vec![
             (Some("action"), Some("mm-1")),
             (Some("sensor"), Some("mm-1")),
-            (Some("undock"), Some("mm-1")),
+            (Some("action"), Some("mm-1")), // undock: an action, like pick
             (Some("move_command"), Some("mm-1")),
             (Some("sensor"), Some("mm-1")),
-            (Some("dock"), Some("mm-1")),
+            (Some("action"), Some("mm-1")), // dock
             (Some("action"), Some("mm-1")),
         ]
     );
@@ -197,9 +197,10 @@ fn position_reports_are_optional_and_only_while_moving() {
     let positions: Vec<&Message> = with.iter().filter(|m| m.kind == Some("position")).collect();
     assert_eq!(with.len() - positions.len(), without.len(), "the payloads are all still there");
     let times: Vec<u64> = positions.iter().map(|m| m.sim_ms).collect();
-    // Every 100 ms from the undock (1 s) to the dock (4 s), plus one on arrival.
-    let mut expected: Vec<u64> = (10..40).map(|i| i * 100).collect();
-    expected.push(4000);
+    // Every 100 ms from the undock (1 s), through the move and the dock's glide, to the place (5 s),
+    // where it reports once more on arrival. The move flows into the glide, so no stop at 4 s.
+    let mut expected: Vec<u64> = (10..50).map(|i| i * 100).collect();
+    expected.push(5000);
     assert_eq!(times, expected);
     assert_eq!(
         positions[5].json,
@@ -207,9 +208,10 @@ fn position_reports_are_optional_and_only_while_moving() {
     );
     let last: serde_json::Value = serde_json::from_str(&positions.last().unwrap().json).unwrap();
     assert_eq!((last["x"].as_f64(), last["y"].as_f64(), last["speed_mps"].as_f64()), (Some(2.0), Some(5.0), Some(0.0)));
-    // The arrival report comes before the dock it ends with.
-    let arrival = with.iter().position(|m| m.kind == Some("position") && m.sim_ms == 4000).unwrap();
-    assert_eq!(with[arrival + 1].kind, Some("dock"));
+    // The arrival report comes before the place that follows the docking.
+    let arrival = with.iter().position(|m| m.kind == Some("position") && m.sim_ms == 5000).unwrap();
+    assert_eq!(with[arrival + 1].kind, Some("action"));
+    assert!(with[arrival + 1].json.contains(r#""event":"place""#));
 
     // In the envelope format they are the simulator's own position events.
     let enveloped = play(&mut sample_replay(ReplayOptions { format: Format::Envelope, positions: true }));
@@ -234,22 +236,31 @@ fn mms_follow_their_undock_move_and_dock_events() {
     let view = mm1(&replay);
     assert_eq!((view.x, view.y, view.at.as_deref()), (6.0, 5.0, Some("stocker")));
 
-    // Backing away from the stocker: 1 m over the second after the undock, leaning 30° to the side
-    // (straight out is -90°; the first MM leans to -120°), so it ends at (5.5, 5 - 0.866).
-    let lean_y = 5.0 - 3f64.sqrt() / 2.0;
+    // The first MM waits beside a machine 1 m out from its dock, leaning 30° to one side: straight
+    // out from these docks is -90°, so it waits at -120°, i.e. (dock.x - 0.5, dock.y - 0.866).
+    let out_y = 5.0 - 3f64.sqrt() / 2.0;
+    let close = |view: &MmView, x: f64, y: f64| (view.x - x).abs() < 1e-9 && (view.y - y).abs() < 1e-9;
+
+    // Undocking glides it out to the stocker's approach point over the next second.
     advance_to(&mut replay, 1500);
     let view = mm1(&replay);
-    assert!((view.x - 5.75).abs() < 1e-9 && (view.y - (5.0 + lean_y) / 2.0).abs() < 1e-9, "{view:?}");
+    assert!(close(&view, 5.75, (5.0 + out_y) / 2.0), "{view:?}");
     assert!(view.at.is_none() && (view.speed_mps - 1.0).abs() < 1e-9, "{view:?}");
 
-    // Halfway from there to the bonder's dock (2, 5), arriving at the dock event.
+    // The move drives between the approach points (5.5 -> 1.5), arriving at the dock event.
     advance_to(&mut replay, 3000);
     let view = mm1(&replay);
-    assert!((view.x - 3.75).abs() < 1e-9 && (view.y - (lean_y + 5.0) / 2.0).abs() < 1e-9, "{view:?}");
+    assert!(close(&view, 3.5, out_y), "{view:?}");
     let motion = view.motion.unwrap();
     assert_eq!((motion.target.at.as_deref(), motion.eta_ms), (Some("bonder"), 1000));
 
-    advance_to(&mut replay, 4000);
+    // Docking glides it into the bonder's dock (2, 5) over the next second.
+    advance_to(&mut replay, 4500);
+    let view = mm1(&replay);
+    assert!(close(&view, 1.75, (out_y + 5.0) / 2.0), "{view:?}");
+    assert_eq!(view.at.as_deref(), Some("bonder"));
+
+    advance_to(&mut replay, 5000);
     let view = mm1(&replay);
     assert_eq!((view.x, view.y, view.at.as_deref(), view.speed_mps), (2.0, 5.0, Some("bonder"), 0.0));
     assert!(view.motion.is_none());

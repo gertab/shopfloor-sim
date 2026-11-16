@@ -5,15 +5,16 @@
 //! reports. Like [`Engine`](crate::engine::Engine) it is synchronous and deterministic: a runtime
 //! (or a fast run) calls [`Replay::step`] once per tick.
 //!
-//! The payloads also drive the picture. MMs follow their `undock`, `move` and `dock` events on the
-//! scenario's layout, and sensor payloads update the scenario's sensors. Building that picture is
-//! also where a trace is checked against the scenario (see [`Finding`]).
+//! The payloads also drive the picture. On the scenario's layout, MMs glide out of a dock on
+//! `undock`, drive on `move` and glide in on `dock` (all three still count as actions or moves for
+//! routing), and sensor payloads update the scenario's sensors. Building that picture is also where
+//! a trace is checked against the scenario (see [`Finding`]).
 
 use crate::command::Control;
 use crate::engine::{ActionAvailability, MmView, MotionView, Place, SensorView, WorldState};
 use crate::event::{EventBody, SCHEMA_VERSION, SimEvent};
 use crate::geometry::{Vec2, round_to};
-use crate::scenario::Scenario;
+use crate::scenario::{MachineDef, Scenario};
 use crate::sinks::{EventSink, Message, to_json_line};
 use crate::trace::{Payload, Trace, load_trace, merge};
 use anyhow::bail;
@@ -21,12 +22,13 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// How far an undocking MM backs away from the dock, and for how long at most.
-const UNDOCK_BACKOFF_M: f64 = 1.0;
-const UNDOCK_MS: u64 = 1000;
-/// It backs away at this angle to one side, the side alternating by MM, so that two MMs waiting at
-/// the same machine stand apart.
-const UNDOCK_LEAN_RAD: f64 = std::f64::consts::PI / 6.0;
+/// Where an MM waits beside a machine: this far out from its dock, away from the machine, leaning to
+/// one side (alternating by MM) so that two MMs waiting at the same machine stand apart.
+const APPROACH_M: f64 = 1.0;
+const APPROACH_LEAN_RAD: f64 = std::f64::consts::PI / 6.0;
+/// How long docking and undocking take at most: the MM glides between its approach point and the
+/// dock.
+const GLIDE_MS: u64 = 1000;
 /// Why nothing can be done by hand during a replay.
 pub const READ_ONLY: &str = "Replaying a trace: manual control is off";
 
@@ -710,8 +712,20 @@ fn check_timestamps(timeline: &[Item], names: &[String], findings: &mut Findings
     first.map(|(_, base)| base)
 }
 
-/// Where `def` is over time, from its `undock`, `move` and `dock` events, checking that they follow
-/// on from each other.
+/// Where MM number `mm_index` waits beside `machine` (see [`APPROACH_M`]).
+fn approach(scenario: &Scenario, machine: &MachineDef, mm_index: usize, radius_m: f64) -> Vec2 {
+    let out = machine.dock - machine.position;
+    let out = if out.length() > 1e-9 { out.heading() } else { -std::f64::consts::FRAC_PI_2 };
+    let lean = if mm_index.is_multiple_of(2) { -APPROACH_LEAN_RAD } else { APPROACH_LEAN_RAD };
+    let direction = Vec2::new((out + lean).cos(), (out + lean).sin());
+    scenario
+        .reachable_area(radius_m)
+        .clamp(machine.dock + direction.scale(APPROACH_M))
+}
+
+/// Where `def` is over time: it glides out of a dock on `undock`, drives between approach points
+/// on `move`, and glides into a dock on `dock`. Also checks that its events follow on from each
+/// other.
 fn build_track(
     scenario: &Scenario,
     mm_index: usize,
@@ -726,33 +740,27 @@ fn build_track(
         .iter()
         .filter(|item| item.payload.device_id.as_deref() == Some(id) && item.payload.event.is_some())
         .collect();
-    let dock_of = |machine: &Option<String>| {
-        machine
-            .as_deref()
-            .and_then(|machine| scenario.machine(machine))
-            .map(|machine| machine.dock)
-    };
+    let machine_of = |name: &Option<String>| name.as_deref().and_then(|name| scenario.machine(name));
+    let approach_of = |machine: &MachineDef| approach(scenario, machine, mm_index, def.radius_m);
 
-    // Before its first event, the MM is where that event places it, else at its start.
+    // Before its first event, the MM is where that event implies (docked before an undock, at the
+    // approach point before a move or a dock), else at its start.
     let first = events.iter().find_map(|item| {
         let payload = &item.payload;
         match payload.event.as_deref() {
-            Some("undock") | Some("dock") => dock_of(&payload.target).map(|at| (at, payload.event.as_deref() == Some("dock"))),
-            Some("move") => dock_of(&payload.source).map(|at| (at, false)),
+            Some("undock") => machine_of(&payload.target).map(|m| (m.dock, Some(m.id.clone()))),
+            Some("dock") => machine_of(&payload.target).map(|m| (approach_of(m), None)),
+            Some("move") => machine_of(&payload.source).map(|m| (approach_of(m), None)),
             _ => None,
         }
     });
-    let (start, arriving) = first.unwrap_or((def.start, false));
+    let (start, docked) = first.unwrap_or_else(|| {
+        let docked = scenario.machine_docked_at(def.start).map(|machine| machine.id.clone());
+        (def.start, docked)
+    });
     let mut track = Track {
         keys: vec![(0, start)],
-        docked: vec![(
-            0,
-            if arriving {
-                None
-            } else {
-                scenario.machine_docked_at(start).map(|machine| machine.id.clone())
-            },
-        )],
+        docked: vec![(0, docked)],
         moves: Vec::new(),
     };
     let mut last_machine = track.docked_now();
@@ -762,6 +770,8 @@ fn build_track(
         let (trace, step) = (&names[item.trace], Some(item.step));
         let t = item.at_ms;
         let next_t = events.get(index + 1).map(|next| next.at_ms);
+        // Docking and undocking take a second, or less if the MM's next event comes sooner.
+        let glide = next_t.map_or(GLIDE_MS, |next| (next - t).min(GLIDE_MS));
         let payload = &item.payload;
         let event = payload.event.as_deref().unwrap_or_default();
         match event {
@@ -783,16 +793,7 @@ fn build_track(
                     ),
                 }
                 track.cut(t);
-                track.go(t, machine.dock);
-                let out = machine.dock - machine.position;
-                let out = if out.length() > 1e-9 { out.heading() } else { -std::f64::consts::FRAC_PI_2 };
-                let lean = if mm_index.is_multiple_of(2) { -UNDOCK_LEAN_RAD } else { UNDOCK_LEAN_RAD };
-                let away = Vec2::new((out + lean).cos(), (out + lean).sin());
-                let backed_off = scenario
-                    .reachable_area(def.radius_m)
-                    .clamp(machine.dock + away.scale(UNDOCK_BACKOFF_M));
-                let duration = next_t.map_or(UNDOCK_MS, |next| (next - t).min(UNDOCK_MS));
-                track.go(t + duration, backed_off);
+                track.go(t + glide, approach_of(machine));
                 track.docked.push((t, None));
                 last_machine = Some(machine.id.clone());
             }
@@ -812,19 +813,21 @@ fn build_track(
                 let Some(destination) = payload.destination.as_deref().and_then(|m| scenario.machine(m)) else {
                     continue;
                 };
+                // To the destination's approach point; the dock glides it the rest of the way.
+                let target = approach_of(destination);
                 let arrive = match next_t {
                     Some(next) => next,
-                    None => t + (from.distance(destination.dock) / def.max_speed_mps * 1000.0).round() as u64,
+                    None => t + (from.distance(target) / def.max_speed_mps * 1000.0).round() as u64,
                 };
-                track.go(arrive, destination.dock);
+                track.go(arrive, target);
                 *command_ids += 1;
                 track.moves.push(MoveSpan {
                     start_ms: t,
                     end_ms: arrive,
                     command_id: *command_ids,
                     target: Place {
-                        x: destination.dock.x,
-                        y: destination.dock.y,
+                        x: target.x,
+                        y: target.y,
                         at: Some(destination.id.clone()),
                     },
                 });
@@ -847,7 +850,7 @@ fn build_track(
                     );
                 }
                 track.cut(t);
-                track.go(t, machine.dock);
+                track.go(t + glide, machine.dock);
                 track.docked.push((t, Some(machine.id.clone())));
                 last_machine = Some(machine.id.clone());
                 heading_to = None;

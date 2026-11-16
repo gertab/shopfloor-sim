@@ -223,13 +223,11 @@ impl Payload {
     }
 
     /// The simulator event kind this payload counts as (for MQTT `kinds`, the app's log and the
-    /// envelope): `move` → `move_command`, `dock`/`undock` as they are, any other `event` →
-    /// `action`, and a `type` without an `event` → `sensor`.
+    /// envelope): `move` → `move_command`, any other `event` (`pick`, `place`, `dock`, `undock`, …)
+    /// → `action`, and a `type` without an `event` → `sensor`.
     pub fn kind(&self) -> Option<&'static str> {
         match self.event.as_deref() {
             Some("move") => Some("move_command"),
-            Some("dock") => Some("dock"),
-            Some("undock") => Some("undock"),
             Some(_) => Some("action"),
             None if self.sensor_type.is_some() => Some("sensor"),
             None => None,
@@ -329,8 +327,8 @@ mod tests {
         assert_eq!(kind(r#"{"type":"vibration","device_id":"mm-2","value":1.3}"#), Some("sensor"));
         assert_eq!(kind(r#"{"device_id":"mm-1","event":"pick","object":"dies"}"#), Some("action"));
         assert_eq!(kind(r#"{"device_id":"mm-1","event":"move","source":"a","destination":"b"}"#), Some("move_command"));
-        assert_eq!(kind(r#"{"event":"dock","target":"a"}"#), Some("dock"));
-        assert_eq!(kind(r#"{"event":"undock","target":"a"}"#), Some("undock"));
+        assert_eq!(kind(r#"{"event":"dock","target":"a"}"#), Some("action"));
+        assert_eq!(kind(r#"{"event":"undock","target":"a"}"#), Some("action"));
         assert_eq!(kind(r#"{"device_id":"mm-1"}"#), None);
         assert_eq!(kind("[1, 2]"), None);
 
