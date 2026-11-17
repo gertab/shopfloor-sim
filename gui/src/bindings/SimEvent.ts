@@ -51,11 +51,19 @@ target: string,
 /**
  * The move that brought it there.
  */
-command_id: number, x: number, y: number, } | { "kind": "sensor", sensor: string, device_id: string, 
+command_id: number, x: number, y: number, } | { "kind": "sensor", 
+/**
+ * The sensor's id: `<host>.<name>` when mounted, its own id when free-standing.
+ */
+sensor_id: string, 
+/**
+ * The machine or MM it is mounted on, or the sensor itself when free-standing.
+ */
+device_id: string, 
 /**
  * The sensor's kind, e.g. `"vibration"`.
  */
-type: string, value: number, unit: string, x: number, y: number, } | { "kind": "sensor_set", sensor: string, device_id: string, type: string, setpoint: number, noise_std: number, previous_setpoint: number, 
+type: string, value: number, unit: string, x: number, y: number, } | { "kind": "sensor_set", sensor_id: string, device_id: string, type: string, setpoint: number, noise_std: number, previous_setpoint: number, 
 /**
  * Whether its readings are paused, so it reports nothing.
  */

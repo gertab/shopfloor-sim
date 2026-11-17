@@ -249,7 +249,7 @@ mod tests {
         event(
             seq,
             EventBody::Sensor {
-                sensor: "mm1.vibration".into(),
+                sensor_id: "mm1.vibration".into(),
                 device_id: "mm1".into(),
                 sensor_type: "vibration".into(),
                 value: 1.2,

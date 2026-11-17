@@ -341,8 +341,8 @@ Every event is **one flat JSON object** with the same envelope:
 | `stopped` | An MM is stopped before arriving | `device_id`, `command_id`, `x`, `y`, `at`, `origin` |
 | `undock` | A docked MM starts a move away from its machine, just before the `move_command` | `device_id`, `event` (`"undock"`), `target` (the machine it leaves), `command_id` (the move), `x`, `y` |
 | `dock` | An MM comes to rest at a machine's dock, just after the `arrived` or `stopped` | `device_id`, `event` (`"dock"`), `target` (the machine), `command_id` (the move), `x`, `y` |
-| `sensor` | Every `period_ms` per sensor | `sensor` (id), `device_id` (host, or the sensor itself if free-standing), `type` (the sensor's kind), `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
-| `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor`, `device_id`, `type`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
+| `sensor` | Every `period_ms` per sensor | `sensor_id`, `device_id` (host, or the sensor itself if free-standing), `type` (the sensor's kind), `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
+| `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor_id`, `device_id`, `type`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
 | `action` | An MM performs an action (silent: nothing else changes) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
 | `sim` | Started, paused, resumed or reset | `state`, `scenario` |
 | `scene` | A scene starts, restarts (next iteration), finishes, is stopped, or fails | `scene`, `state` (`started`/`restarted`/`finished`/`stopped`/`failed`), `iteration`, `error` (why it failed, else null) |
@@ -356,7 +356,7 @@ where the MM already is, or a new target for an MM that is already moving, emits
 {"v":1,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}
 {"v":1,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}
 {"v":1,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
-{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
+{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor_id":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
 {"v":1,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}
 {"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}
 {"v":1,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}

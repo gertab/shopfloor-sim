@@ -348,7 +348,7 @@ impl Engine {
                 SensorAnchor::Fixed(position) => position,
             };
             bodies.push(EventBody::Sensor {
-                sensor: def.id.clone(),
+                sensor_id: def.id.clone(),
                 device_id: def.host.clone(),
                 sensor_type: def.kind.clone(),
                 value,
@@ -614,7 +614,7 @@ impl Engine {
             sensor.paused = paused;
         }
         Ok(vec![EventBody::SensorSet {
-            sensor: def.id.clone(),
+            sensor_id: def.id.clone(),
             device_id: def.host.clone(),
             sensor_type: def.kind.clone(),
             setpoint: sensor.setpoint,

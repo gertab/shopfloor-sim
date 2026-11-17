@@ -315,7 +315,11 @@ fn sensors_report_on_their_period_and_follow_setpoints() {
     let readings: Vec<(String, u64, f64)> = events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::Sensor { sensor, value, .. } => Some((sensor.clone(), e.sim_ms, *value)),
+            EventBody::Sensor {
+                sensor_id: sensor,
+                value,
+                ..
+            } => Some((sensor.clone(), e.sim_ms, *value)),
             _ => None,
         })
         .collect();
@@ -341,7 +345,7 @@ fn sensors_report_on_their_period_and_follow_setpoints() {
     assert_eq!(
         events[0].body,
         EventBody::SensorSet {
-            sensor: "mm1.vibration".into(),
+            sensor_id: "mm1.vibration".into(),
             device_id: "mm1".into(),
             sensor_type: "vibration".into(),
             setpoint: 0.8,
@@ -353,7 +357,7 @@ fn sensors_report_on_their_period_and_follow_setpoints() {
     );
     let events = run(&mut engine, 25);
     assert!(events.iter().any(|e| e.sim_ms == 1500
-        && matches!(&e.body, EventBody::Sensor { sensor, value, .. } if sensor == "mm1.vibration" && *value == 0.8)));
+        && matches!(&e.body, EventBody::Sensor { sensor_id: sensor, value, .. } if sensor == "mm1.vibration" && *value == 0.8)));
     assert_eq!(engine.state().sensors[1].last_value, Some(0.8));
 }
 
@@ -378,7 +382,11 @@ fn noise_is_seeded_and_clamped() {
     let values: Vec<f64> = first
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::Sensor { sensor, value, .. } if sensor == "mm1.vibration" => Some(*value),
+            EventBody::Sensor {
+                sensor_id: sensor,
+                value,
+                ..
+            } if sensor == "mm1.vibration" => Some(*value),
             _ => None,
         })
         .collect();
@@ -402,7 +410,11 @@ fn readings_of(events: &[SimEvent], id: &str) -> Vec<(u64, f64)> {
     events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::Sensor { sensor, value, .. } if sensor == id => Some((e.sim_ms, *value)),
+            EventBody::Sensor {
+                sensor_id: sensor,
+                value,
+                ..
+            } if sensor == id => Some((e.sim_ms, *value)),
             _ => None,
         })
         .collect()
@@ -423,7 +435,7 @@ fn a_paused_sensor_reports_nothing_until_resumed() {
     let events = engine.apply(set_paused("mm1.vibration", true), TS).unwrap();
     assert!(matches!(
         &events[0].body,
-        EventBody::SensorSet { sensor, paused: true, origin: Origin::Ui, .. } if sensor == "mm1.vibration"
+        EventBody::SensorSet { sensor_id: sensor, paused: true, origin: Origin::Ui, .. } if sensor == "mm1.vibration"
     ));
     assert!(sensor_view(&engine, "mm1.vibration").paused);
 
@@ -969,7 +981,12 @@ fn reading_positions(events: &[SimEvent], id: &str) -> Vec<(u64, f64, f64)> {
     events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::Sensor { sensor, x, y, .. } if sensor == id => Some((e.sim_ms, *x, *y)),
+            EventBody::Sensor {
+                sensor_id: sensor,
+                x,
+                y,
+                ..
+            } if sensor == id => Some((e.sim_ms, *x, *y)),
             _ => None,
         })
         .collect()

@@ -135,7 +135,7 @@ export function describeEntry(entry: LogEntry, scenario: Scenario | null): strin
     case "dock":
       return `${ref}docked at ${describePlace(scenario, str(data, "target"), here)}`;
     case "sensor": {
-      const name = str(data, "sensor") ?? `${entry.device_id ?? "?"} ${str(data, "type") ?? ""}`;
+      const name = str(data, "sensor_id") ?? `${entry.device_id ?? "?"} ${str(data, "type") ?? ""}`;
       const target = str(data, "target");
       return (
         `${name} = ${formatValue(num(data, "value"))} ${str(data, "unit") ?? ""}` +
@@ -144,7 +144,7 @@ export function describeEntry(entry: LogEntry, scenario: Scenario | null): strin
       );
     }
     case "sensor_set":
-      return `${str(data, "sensor")} setpoint ${formatValue(num(data, "previous_setpoint"))} -> ${formatValue(num(data, "setpoint"))}, noise σ ${formatValue(num(data, "noise_std"))}${data.paused ? ", paused" : ""}${by}`;
+      return `${str(data, "sensor_id")} setpoint ${formatValue(num(data, "previous_setpoint"))} -> ${formatValue(num(data, "setpoint"))}, noise σ ${formatValue(num(data, "noise_std"))}${data.paused ? ", paused" : ""}${by}`;
     case "action": {
       const event = str(data, "event") ?? "?";
       const object = str(data, "object");

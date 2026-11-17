@@ -104,7 +104,9 @@ pub enum EventBody {
     },
     /// A sensor reading, with where it was taken (MM position, machine centre or fixed position).
     Sensor {
-        sensor: String,
+        /// The sensor's id: `<host>.<name>` when mounted, its own id when free-standing.
+        sensor_id: String,
+        /// The machine or MM it is mounted on, or the sensor itself when free-standing.
         device_id: String,
         /// The sensor's kind, e.g. `"vibration"`.
         #[serde(rename = "type")]
@@ -117,7 +119,7 @@ pub enum EventBody {
     /// A sensor's setpoint, noise or pause state was changed (ground truth for what the readings
     /// should show).
     SensorSet {
-        sensor: String,
+        sensor_id: String,
         device_id: String,
         #[serde(rename = "type")]
         sensor_type: String,
@@ -408,7 +410,7 @@ mod tests {
                 43,
                 4500,
                 EventBody::Sensor {
-                    sensor: "mm1.vibration".into(),
+                    sensor_id: "mm1.vibration".into(),
                     device_id: "mm1".into(),
                     sensor_type: "vibration".into(),
                     value: 1.0,
@@ -417,14 +419,14 @@ mod tests {
                     y: 8.0,
                 },
             ),
-            r#"{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}"#,
+            r#"{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor_id":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}"#,
         );
         assert_golden(
             event(
                 60,
                 13000,
                 EventBody::SensorSet {
-                    sensor: "mm1.vibration".into(),
+                    sensor_id: "mm1.vibration".into(),
                     device_id: "mm1".into(),
                     sensor_type: "vibration".into(),
                     setpoint: 0.8,
@@ -434,7 +436,7 @@ mod tests {
                     origin: Origin::Ui,
                 },
             ),
-            r#"{"v":1,"seq":60,"timestamp_ms":1761730013000,"sim_ms":13000,"kind":"sensor_set","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","setpoint":0.8,"noise_std":0.0,"previous_setpoint":0.1,"paused":false,"origin":"ui"}"#,
+            r#"{"v":1,"seq":60,"timestamp_ms":1761730013000,"sim_ms":13000,"kind":"sensor_set","sensor_id":"mm1.vibration","device_id":"mm1","type":"vibration","setpoint":0.8,"noise_std":0.0,"previous_setpoint":0.1,"paused":false,"origin":"ui"}"#,
         );
     }
 
