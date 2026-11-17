@@ -31,7 +31,7 @@ pub struct ScenarioSpec {
     pub scenes: BTreeMap<String, SceneSpec>,
     #[serde(default)]
     pub output: OutputSpec,
-    /// Liminal Desk traces to replay on this layout (see `replay.rs`): what the app's Replay section
+    /// Liminal Desk traces to replay on this layout (see the `replay` module): what the app's Replay section
     /// and `shopfloor replay` start with. The scenario still simulates until a replay is started.
     pub replay: Option<ReplaySettings>,
 }

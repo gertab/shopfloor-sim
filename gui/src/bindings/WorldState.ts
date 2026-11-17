@@ -13,6 +13,6 @@ export type WorldState = { sim_ms: number, paused: boolean, mobile_manipulators:
  */
 scene: SceneStatus | null, 
 /**
- * Progress of a trace replay (set only while replaying, see `replay.rs`).
+ * Progress of a trace replay (set only while replaying, see the `replay` module).
  */
 replay: ReplayStatus | null, };

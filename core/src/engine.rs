@@ -99,7 +99,7 @@ pub struct WorldState {
     pub sensors: Vec<SensorView>,
     /// The playing scene, if any.
     pub scene: Option<SceneStatus>,
-    /// Progress of a trace replay (set only while replaying, see `replay.rs`).
+    /// Progress of a trace replay (set only while replaying, see the `replay` module).
     pub replay: Option<crate::replay::ReplayStatus>,
 }
 

@@ -84,7 +84,7 @@ every push and pull request, and fails if the bindings are out of date.
 | Stop | **Stop** on the MM's card. |
 | Perform an action | Use the action buttons (Pick, Place, ...) on the MM's card. A greyed-out button shows why on hover (e.g. "'pick' needs mm1 at a machine"). The action name flashes above the MM, and the card shows the last action. |
 | Change a sensor | Use the slider or number field in **Sensors** on the right. The reset button beside it restores the default. The pause button stops its readings, as if the sensor had failed, until you resume it. **noise σ** adds Gaussian noise. Clicking a reading or a free-standing sensor's diamond on the floor jumps to its control. Free-standing sensors are listed under **Floor**. |
-| Pause / reset | Toolbar, or **Space** to pause and resume. Reset returns to start positions, default sensor values and time 0. |
+| Pause / start again | **Pause** in the toolbar, or **Space**, pauses and resumes. **Reload** starts again from the scenario file: start positions, default sensor values and time 0. Outputs reconnect and the stream starts over. |
 | Inspect the output | The bottom panel shows every event. Filter by entity, or by group: **position**, **sensor** (readings), **event** (moves, docking, arrivals, stops and actions) and **sim** (the simulation, scenes and sensor changes). The groups only apply to the panel; the events keep their kinds. **{}** shows the raw JSON lines that the sinks write. |
 | Play a scene | **Scenes** at the top right: **Play** / **Stop**. While it plays, each track shows what it waits on, and the toolbar shows the scene and its iteration. Pause and Reset apply to the scene too, and manual control still works. |
 | Switch scenario | **Open** (the picker starts in `scenarios/`). **Reload** re-reads the current file. |
@@ -299,7 +299,7 @@ steps = [
 | `perform = { mm, action }` or `{ mm, action, object }` | Perform an action. The optional `object` (e.g. `"dies"`) is reported in the `action` event. |
 | `set_sensor = { sensor, value }` | Set a sensor's value |
 | `set_sensor_noise = { sensor, std }` | Set a sensor's noise |
-| `pause_sensor = "mm1.vibration"` | Stop a sensor's readings, as if it had failed. It stays paused until resumed or the simulation is reset, even if the scene ends or is stopped. |
+| `pause_sensor = "mm1.vibration"` | Stop a sensor's readings, as if it had failed. It stays paused until resumed or the scenario is reloaded, even if the scene ends or is stopped. |
 | `resume_sensor = "mm1.vibration"` | Start its readings again, on its usual schedule |
 | `stop = "mm1"` | Stop the MM |
 
@@ -307,7 +307,7 @@ How it plays:
 - Steps run in **simulation time**.
   - Commands run the moment their track reaches them.
   - A track only pauses at a wait.
-  - Pausing the simulation pauses the scene; Reset stops it.
+  - Pausing the simulation pauses the scene; reloading stops it.
 - An **iteration** ends when every track has finished. With `loop` / `repeat`, all tracks then start again from where
   the world is now. The world is not reset, so write looping scenes that return MMs to where they began.
 - If a step is rejected, the scene **fails** and stops, and the world keeps running. Example: a `pick` while the MM
@@ -506,7 +506,7 @@ How a replay works:
   - Sensor payloads update the sensor with the same `device_id` (its host) and `type` (its kind).
 - **Read-only.**
   - No moves, actions, sensor changes or scenes are possible: the app disables them, and the backend refuses them.
-  - Pause works, and Reset starts the replay again.
+  - Pause works. To start over, stop the replay and start it again.
 - **Position reports** (`--positions`).
   - They are sampled from those same movements.
   - In the payload format: `{"device_id","x","y","heading_rad","speed_mps","timestamp_ms"}`. In the envelope format:
@@ -525,7 +525,7 @@ In the app, the **Replay** section at the top of the right-hand panel:
   - **Stop replay** goes back to simulating the same layout.
   - Once the last payload has gone out, the app goes back to simulating the layout by itself. The section notes that
     the replay finished, and keeps its traces and options for another run.
-  - The toolbar's Pause and Reset act on the replay.
+  - The toolbar's Pause acts on the replay.
 - The log shows exactly what the outputs send.
 - Switching between simulating and replaying keeps the outputs open: starting, stopping, or the return when a replay
   finishes. A TCP client such as Liminal stays connected, and so does the MQTT connection. Open and Reload restart them,

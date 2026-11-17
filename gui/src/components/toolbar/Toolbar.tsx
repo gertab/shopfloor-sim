@@ -7,7 +7,6 @@ import {
   Play,
   RadioTower,
   RefreshCw,
-  RotateCcw,
   Terminal,
 } from "lucide-react";
 import { formatSimTime } from "../../format";
@@ -41,7 +40,6 @@ export function Toolbar({
   onControl,
 }: ToolbarProps) {
   const paused = world?.paused ?? false;
-  const replay = world?.replay ?? null;
   return (
     <header className="toolbar">
       <div className="brand">Shopfloor</div>
@@ -57,7 +55,7 @@ export function Toolbar({
         className="tool-button"
         onClick={onReload}
         disabled={!scenario}
-        title="Reload the scenario file from disk (restarts the simulation)"
+        title="Reload the scenario file from disk and start again: outputs reconnect, and a replay ends"
       >
         <RefreshCw size={15} />
         Reload
@@ -72,20 +70,6 @@ export function Toolbar({
       >
         {paused ? <Play size={15} /> : <Pause size={15} />}
         {paused ? "Resume" : "Pause"}
-      </button>
-      <button
-        type="button"
-        className="tool-button"
-        disabled={!world}
-        onClick={() => onControl("reset")}
-        title={
-          replay
-            ? "Start the replay again from the beginning"
-            : "Back to the initial state: start positions, default sensor values, time 0"
-        }
-      >
-        <RotateCcw size={15} />
-        Reset
       </button>
       <div className={`sim-clock${paused ? " is-paused" : ""}`} title="Simulation time">
         {world ? formatSimTime(world.sim_ms) : "--:--.-"}

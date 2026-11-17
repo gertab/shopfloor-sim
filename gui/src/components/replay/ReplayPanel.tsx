@@ -101,8 +101,8 @@ export function ReplayPanel({ scenario, world, finished, onPickTraces, onStart, 
             Stop replay
           </button>
           <p className="hint">
-            Manual control is off. Pause and Reset in the toolbar act on the replay, and once everything is sent the
-            floor goes back to simulating.
+            Manual control is off. Pause in the toolbar acts on the replay; to start over, stop it and start it
+            again. Once everything is sent, the floor goes back to simulating.
           </p>
         </div>
       )}
