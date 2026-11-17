@@ -414,7 +414,7 @@ fn pause_holds_and_reset_starts_again() {
 #[test]
 fn the_die_processing_traces_fit_their_scenario() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../scenarios/die-processing/die-processing.toml");
+        .join("../scenarios/replay-example/die-processing.toml");
     let scenario = Arc::new(crate::scenario::load_scenario(&path).unwrap());
     let traces = scenario.replay.as_ref().unwrap().traces.clone();
     let (mut replay, findings) =
