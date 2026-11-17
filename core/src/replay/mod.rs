@@ -449,7 +449,7 @@ struct PositionPayload<'a> {
     timestamp_ms: u64,
 }
 
-/// `{"v":2,"seq":..,"sim_ms":..,"kind":..}` in front of the payload's own keys, kept as written.
+/// `{"v":1,"seq":..,"sim_ms":..,"kind":..}` in front of the payload's own keys, kept as written.
 /// `payload` must be a compact JSON object.
 pub fn envelope(
     seq: u64,

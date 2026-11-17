@@ -11,7 +11,7 @@ use crate::command::Origin;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 1;
 
 /// Decimals kept in event output: positions to the millimetre, headings to ~0.0001 rad.
 pub(crate) const POSITION_DECIMALS: i32 = 3;
@@ -312,7 +312,7 @@ mod tests {
                     replaces: None,
                 },
             ),
-            r#"{"v":2,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}"#,
+            r#"{"v":1,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}"#,
         );
     }
 
@@ -330,7 +330,7 @@ mod tests {
                     speed_mps: 0.8,
                 },
             ),
-            r#"{"v":2,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}"#,
+            r#"{"v":1,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}"#,
         );
     }
 
@@ -348,7 +348,7 @@ mod tests {
                     at: Some("machine2".into()),
                 },
             ),
-            r#"{"v":2,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}"#,
+            r#"{"v":1,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}"#,
         );
         assert_golden(
             event(
@@ -363,7 +363,7 @@ mod tests {
                     origin: Origin::Scene,
                 },
             ),
-            r#"{"v":2,"seq":58,"timestamp_ms":1761730012000,"sim_ms":12000,"kind":"stopped","device_id":"mm2","command_id":4,"x":6.5,"y":3.25,"at":null,"origin":"scene"}"#,
+            r#"{"v":1,"seq":58,"timestamp_ms":1761730012000,"sim_ms":12000,"kind":"stopped","device_id":"mm2","command_id":4,"x":6.5,"y":3.25,"at":null,"origin":"scene"}"#,
         );
     }
 
@@ -382,7 +382,7 @@ mod tests {
                     y: 8.0,
                 },
             ),
-            r#"{"v":2,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}"#,
+            r#"{"v":1,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}"#,
         );
         assert_golden(
             event(
@@ -397,7 +397,7 @@ mod tests {
                     y: 8.0,
                 },
             ),
-            r#"{"v":2,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}"#,
+            r#"{"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}"#,
         );
     }
 
@@ -417,7 +417,7 @@ mod tests {
                     y: 8.0,
                 },
             ),
-            r#"{"v":2,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}"#,
+            r#"{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}"#,
         );
         assert_golden(
             event(
@@ -434,7 +434,7 @@ mod tests {
                     origin: Origin::Ui,
                 },
             ),
-            r#"{"v":2,"seq":60,"timestamp_ms":1761730013000,"sim_ms":13000,"kind":"sensor_set","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","setpoint":0.8,"noise_std":0.0,"previous_setpoint":0.1,"paused":false,"origin":"ui"}"#,
+            r#"{"v":1,"seq":60,"timestamp_ms":1761730013000,"sim_ms":13000,"kind":"sensor_set","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","setpoint":0.8,"noise_std":0.0,"previous_setpoint":0.1,"paused":false,"origin":"ui"}"#,
         );
     }
 
@@ -455,7 +455,7 @@ mod tests {
                     origin: Origin::Ui,
                 },
             ),
-            r#"{"v":2,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}"#,
+            r#"{"v":1,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}"#,
         );
     }
 
@@ -472,7 +472,7 @@ mod tests {
                     error: None,
                 },
             ),
-            r#"{"v":2,"seq":120,"timestamp_ms":1761730030000,"sim_ms":30000,"kind":"scene","scene":"production","state":"restarted","iteration":2,"error":null}"#,
+            r#"{"v":1,"seq":120,"timestamp_ms":1761730030000,"sim_ms":30000,"kind":"scene","scene":"production","state":"restarted","iteration":2,"error":null}"#,
         );
         assert_golden(
             event(
@@ -485,7 +485,7 @@ mod tests {
                     error: Some("'pick' needs mm1 at a machine; it is at (6.0, 3.0)".into()),
                 },
             ),
-            r#"{"v":2,"seq":121,"timestamp_ms":1761730031000,"sim_ms":31000,"kind":"scene","scene":"production","state":"failed","iteration":2,"error":"'pick' needs mm1 at a machine; it is at (6.0, 3.0)"}"#,
+            r#"{"v":1,"seq":121,"timestamp_ms":1761730031000,"sim_ms":31000,"kind":"scene","scene":"production","state":"failed","iteration":2,"error":"'pick' needs mm1 at a machine; it is at (6.0, 3.0)"}"#,
         );
     }
 
@@ -500,7 +500,7 @@ mod tests {
                     scenario: "Default cell".into(),
                 },
             ),
-            r#"{"v":2,"seq":1,"timestamp_ms":1761730000000,"sim_ms":0,"kind":"sim","state":"started","scenario":"Default cell"}"#,
+            r#"{"v":1,"seq":1,"timestamp_ms":1761730000000,"sim_ms":0,"kind":"sim","state":"started","scenario":"Default cell"}"#,
         );
     }
 
@@ -535,7 +535,7 @@ mod tests {
     #[test]
     fn event_kinds_are_real_kinds() {
         for kind in EVENT_KINDS {
-            let json = format!(r#"{{"v":2,"seq":1,"timestamp_ms":0,"sim_ms":0,"kind":"{kind}"}}"#);
+            let json = format!(r#"{{"v":1,"seq":1,"timestamp_ms":0,"sim_ms":0,"kind":"{kind}"}}"#);
             let error = serde_json::from_str::<SimEvent>(&json).unwrap_err().to_string();
             assert!(!error.contains("unknown variant"), "{kind}: {error}");
         }

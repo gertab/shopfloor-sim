@@ -395,7 +395,7 @@ Every event is **one flat JSON object** with the same envelope:
 
 | Field | Meaning |
 |---|---|
-| `v` | Schema version, currently `2` |
+| `v` | Schema version, currently `1` |
 | `seq` | Sequence number, +1 per event. It continues across Reset and restarts when a scenario is loaded. |
 | `timestamp_ms` | Wall-clock time, epoch **milliseconds** (integer) |
 | `sim_ms` | Simulation time in ms. It excludes pauses and restarts at 0 on Reset. |
@@ -421,13 +421,13 @@ where the MM already is, or a new target for an MM that is already moving, emits
 "mm1 moves from machine1 to machine2, then picks there" is:
 
 ```json
-{"v":2,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}
-{"v":2,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}
-{"v":2,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
-{"v":2,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
-{"v":2,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}
-{"v":2,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}
-{"v":2,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
+{"v":1,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}
+{"v":1,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}
+{"v":1,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
+{"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
+{"v":1,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}
+{"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}
+{"v":1,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
 ```
 
 The keys follow the [Liminal Desk](https://github.com/duncanatt/liminal-desk) traces wherever they describe the same thing
@@ -439,9 +439,7 @@ The exact strings are pinned in [core/src/event.rs](core/src/event.rs).
 
 Schema version rule:
 - **Adding** a kind or a field keeps `v`. Consumers should ignore what they don't know.
-- **Renaming, removing or retyping** a field bumps `v`. v2 renamed `ts` to `timestamp_ms`, `entity` to `device_id`,
-  `sensor_kind` to `type` and an action's `action` to `event`, moved `from.at` / `to.at` to `source` / `destination`,
-  and added `dock` and `undock`.
+- **Renaming, removing or retyping** a field bumps `v`.
 
 Notes for consumers:
 - Route on the top-level fields, starting with `kind`. No field is nested deeper than `from` / `to`.
@@ -481,7 +479,7 @@ positions = false
 |---|---|
 | `TRACE...` | Trace files to play side by side. They replace the scenario's `[replay] traces`. |
 | `--format payload` | The default: each payload exactly as Liminal Desk sends it (same keys, order and number literals), on one line. |
-| `--format envelope` | The payload with `"v":2,"seq":N,"sim_ms":T,"kind":K` in front, plus `timestamp_ms` if it has none. |
+| `--format envelope` | The payload with `"v":1,"seq":N,"sim_ms":T,"kind":K` in front, plus `timestamp_ms` if it has none. |
 | `--positions` / `--no-positions` | Also report the positions of moving MMs, every `position_interval_ms`. Off by default. |
 | `--fast`, `--jsonl PATH`, `--tcp ADDR` | As for `run`. |
 
@@ -567,8 +565,9 @@ parameters = { broker_url = "mqtt://127.0.0.1:1883", topics = ["shopfloor/sensor
 ```
 
 Liminal's `shopfloor` branch has ready-made pipelines for the bundled scenarios in
-[`config/examples/`](https://github.com/gertab/liminal/tree/shopfloor/config/examples). They were written for schema v1,
-so they need v2's renames first (listed under [Output events](#output-events)):
+[`config/examples/`](https://github.com/gertab/liminal/tree/shopfloor/config/examples). They were written for an earlier
+draft of the format, so they need these renames first: `ts` to `timestamp_ms`, `entity` to `device_id`, `sensor_kind` to
+`type`, an action's `action` to `event`, and `from.at` / `to.at` to `source` / `destination`.
 
 | Liminal config | Scenario | What it does |
 |---|---|---|

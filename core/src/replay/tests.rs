@@ -181,11 +181,11 @@ fn the_envelope_format_adds_the_simulator_fields_in_front() {
     let messages = play(&mut replay);
     assert_eq!(
         messages[1].json,
-        r#"{"v":2,"seq":2,"sim_ms":0,"kind":"sensor","type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#
+        r#"{"v":1,"seq":2,"sim_ms":0,"kind":"sensor","type":"vibration","device_id":"mm-1","value":1.250,"unit":"m/s^2","timestamp_ms":1000000}"#
     );
     assert_eq!(
         messages[3].json,
-        r#"{"v":2,"seq":4,"sim_ms":2000,"kind":"move_command","device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#
+        r#"{"v":1,"seq":4,"sim_ms":2000,"kind":"move_command","device_id":"mm-1","event":"move","source":"stocker","destination":"bonder","timestamp_ms":1002000}"#
     );
 }
 
@@ -199,11 +199,11 @@ fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
             Some(42),
             r#"{"device_id":"mm-1","event":"pick"}"#
         ),
-        r#"{"v":2,"seq":3,"sim_ms":1500,"kind":"action","timestamp_ms":42,"device_id":"mm-1","event":"pick"}"#
+        r#"{"v":1,"seq":3,"sim_ms":1500,"kind":"action","timestamp_ms":42,"device_id":"mm-1","event":"pick"}"#
     );
     assert_eq!(
         envelope(1, 0, None, None, "{}"),
-        r#"{"v":2,"seq":1,"sim_ms":0,"kind":null}"#
+        r#"{"v":1,"seq":1,"sim_ms":0,"kind":null}"#
     );
 
     let trace = r#"{"version": 1, "steps": [{"type": "delay", "duration_ms": 200}, {"type": "send", "payload": {"device_id": "mm-1", "event": "pick"}}]}"#;
@@ -216,7 +216,7 @@ fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
     );
     let messages = play(&mut replay);
     let expected = format!(
-        r#"{{"v":2,"seq":1,"sim_ms":200,"kind":"action","timestamp_ms":{},"device_id":"mm-1","event":"pick"}}"#,
+        r#"{{"v":1,"seq":1,"sim_ms":200,"kind":"action","timestamp_ms":{},"device_id":"mm-1","event":"pick"}}"#,
         START_TS + 200
     );
     assert_eq!(messages[0].json, expected);

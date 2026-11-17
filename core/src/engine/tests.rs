@@ -98,7 +98,7 @@ fn move_to_machine_undocks_and_reports_from_and_to_docks() {
         events,
         vec![
             SimEvent {
-                v: 2,
+                v: 1,
                 seq: 1,
                 timestamp_ms: TS,
                 sim_ms: 0,
@@ -112,7 +112,7 @@ fn move_to_machine_undocks_and_reports_from_and_to_docks() {
                 },
             },
             SimEvent {
-                v: 2,
+                v: 1,
                 seq: 2,
                 timestamp_ms: TS,
                 sim_ms: 0,
@@ -699,7 +699,7 @@ fn perform_at_a_dock_emits_action_and_changes_nothing() {
     assert_eq!(
         events,
         vec![SimEvent {
-            v: 2,
+            v: 1,
             seq: 1,
             timestamp_ms: TS,
             sim_ms: 0,
