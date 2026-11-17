@@ -1,8 +1,6 @@
 # Scenario floor for Liminal's scenario examples (config/shopfloor/config_scenario_*.toml in Liminal).
 #
-# A small factory cell whose scenes produce what those configs detect: noise exposure over a shift, temperature
-# changes, a vibration anomaly, a part picked but not placed, a stocker that overfills and runs empty, and the
-# normal traffic for an odometer, utilisation and downsampling.
+# A small factory cell whose scenes produce what those configs detect: noise exposure over a shift, temperature changes, a vibration anomaly, a part picked but not placed, a stocker that overfills and runs empty, and the normal traffic for an odometer, utilisation and downsampling.
 #
 #   docker run -it -p 1883:1883 eclipse-mosquitto        # an MQTT broker, first
 #   cargo run --bin shopfloor -- run scenarios/proposed-liminal-scenarios.toml --scene shift

@@ -205,7 +205,7 @@ scenarios use the same file format and the same simulator:
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | TCP |
-| [die-processing/die-processing.toml](scenarios/die-processing/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two Liminal Desk traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | TCP, MQTT (topics under `die-cell/`) |
+| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two Liminal Desk traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | TCP, MQTT (topics under `die-cell/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size. Machines and MMs are drawn at their real size, and text and markers scale with the floor so
@@ -457,10 +457,11 @@ delays give, exactly as written. Nothing else is sent: no physics, no periodic s
 position reports.
 
 ```bash
-cargo run --bin shopfloor -- replay scenarios/die-processing/die-processing.toml   # its [replay] traces, real time
-cargo run --bin shopfloor -- replay scenarios/die-processing/die-processing.toml a.json b.json \
-    --format envelope --positions --fast --jsonl recordings/replay.jsonl          # all at once, to a file
-cargo run --bin shopfloor -- check scenarios/die-processing/die-processing.toml    # check its traces, no replay
+cargo run --bin shopfloor -- replay scenarios/replay-example/die-processing.toml   # its [replay] traces, real time
+cargo run --bin shopfloor -- replay scenarios/replay-example/die-processing.toml \
+  scenarios/replay-example/machine_events.json scenarios/replay-example/sensor_events.json \
+  --format envelope --positions --fast --jsonl recordings/replay.jsonl          # specify the replay logs, output all at once, to a file
+cargo run --bin shopfloor -- check scenarios/replay-example/die-processing.toml    # check its traces, no replay
 ```
 
 The scenario provides the layout and the outputs. It can name its traces in a `[replay]` section. They're what the app's
@@ -583,7 +584,7 @@ draft of the format, so they need these renames first: `ts` to `timestamp_ms`, `
 # terminal 1, in this repo: the simulator (or the app, playing a scene)
 cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production
 # terminal 2, in the Liminal repo on its shopfloor branch (or open the config in the Liminal GUI and press Run)
-cargo run -- --config config/examples/config_shopfloor_vibr_tcp.toml
+cargo run -- --config config/shopfloor/config_shopfloor_vibr_tcp.toml
 ```
 
 Writing your own pipeline:

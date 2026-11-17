@@ -142,5 +142,5 @@ entities = ["mm-2"]
 topic = "die-cell/all"
 
 # Every message as a JSON line on stdout (the terminal running the app or the CLI).
-# [output.sinks.terminal]
-# type = "stdout"
+[output.sinks.terminal]
+type = "stdout"
