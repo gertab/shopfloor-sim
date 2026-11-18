@@ -397,9 +397,23 @@ fn the_bundled_scenarios_load() {
 
 #[test]
 fn rejects_reserved_action_ids() {
-    let errors = errors_of(&format!("{MINIMAL}\n[actions.dock]\n\n[actions.pick]\n"));
-    assert!(errors.contains("action 'dock' is reserved"), "{errors}");
+    let errors = errors_of(&format!("{MINIMAL}\n[actions.move]\n\n[actions.pick]\n"));
+    assert!(errors.contains("action 'move' is reserved"), "{errors}");
     assert!(!errors.contains("'pick'"), "{errors}");
+}
+
+#[test]
+fn dock_and_undock_are_actions_with_built_in_rules() {
+    let text = format!("{MINIMAL}\n[actions.dock]\nlabel = \"Dock\"\n\n[actions.undock]\n");
+    let scenario = parse_scenario(&text, None).unwrap();
+    assert_eq!(scenario.action("dock").unwrap().label, "Dock");
+    assert!(scenario.action("undock").is_some());
+    let errors = errors_of(&format!("{MINIMAL}\n[actions.dock]\nrequires_machine = true\n"));
+    assert!(errors.contains("action 'dock' has built-in rules"), "{errors}");
+    let errors = errors_of(&format!(
+        "{MINIMAL}\n[actions.undock]\nallowed_while_moving = false\n"
+    ));
+    assert!(errors.contains("action 'undock' has built-in rules"), "{errors}");
 }
 
 #[test]

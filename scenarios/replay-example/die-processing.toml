@@ -100,6 +100,14 @@ requires_machine = true
 label = "Place"
 requires_machine = true
 
+# Docking, as in the traces: near a machine's dock, `dock` drives the MM onto it; at a dock, `undock`
+# drives it 1 m out (see "Docking" in the README).
+[actions.dock]
+label = "Dock"
+
+[actions.undock]
+label = "Undock"
+
 # --- Replay: what the Replay section (and `shopfloor replay`) starts with --------------------------
 
 [replay]
@@ -128,7 +136,7 @@ kinds = ["sensor"]
 
 [[output.sinks.mqtt.topics]]
 topic = "die-cell/events"
-kinds = ["action", "move_command", "dock", "undock"]
+kinds = ["action", "move_command"]
 
 [[output.sinks.mqtt.topics]]
 topic = "die-cell/mm-1"

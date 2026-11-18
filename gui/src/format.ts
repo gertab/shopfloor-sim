@@ -5,8 +5,6 @@ export const KIND_LABELS: Record<EventKind, string> = {
   move_command: "move",
   arrived: "arrived",
   stopped: "stopped",
-  undock: "undock",
-  dock: "dock",
   sensor: "sensor",
   sensor_set: "sensor set",
   action: "action",
@@ -23,8 +21,6 @@ export const KIND_GROUP: Record<EventKind, LogGroup> = {
   position: "position",
   sensor: "sensor",
   move_command: "event",
-  undock: "event",
-  dock: "event",
   arrived: "event",
   stopped: "event",
   action: "event",
@@ -33,7 +29,7 @@ export const KIND_GROUP: Record<EventKind, LogGroup> = {
   sensor_set: "sim",
 };
 
-/** The badge of a log row: an action's own name ("pick"), otherwise the kind ("move", "dock", "sensor set"). */
+/** The badge of a log row: an action's own name ("pick", "dock"), otherwise the kind ("move", "sensor set"). */
 export function rowLabel(entry: LogEntry): string {
   if (!entry.kind) return "other";
   if (entry.kind === "action") return str(entry.data, "event") ?? KIND_LABELS.action;
@@ -130,10 +126,6 @@ export function describeEntry(entry: LogEntry, scenario: Scenario | null): strin
       return `${ref}at ${describePlace(scenario, str(data, "at"), here)}`;
     case "stopped":
       return `${ref}stopped at ${describePlace(scenario, str(data, "at"), here)}${by}`;
-    case "undock":
-      return `${ref}left ${describePlace(scenario, str(data, "target"), here)}`;
-    case "dock":
-      return `${ref}docked at ${describePlace(scenario, str(data, "target"), here)}`;
     case "sensor": {
       const name = str(data, "sensor_id") ?? `${entry.device_id ?? "?"} ${str(data, "type") ?? ""}`;
       const target = str(data, "target");

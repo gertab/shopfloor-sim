@@ -17,7 +17,7 @@ use shopfloor_core::command::Control;
 use shopfloor_core::headless::{FastRun, Outcome, run_fast, scene_outcome};
 use shopfloor_core::replay::{self, Format, Replay, ReplayOptions};
 use shopfloor_core::runtime::{ReplayRuntime, now_ms};
-use shopfloor_core::scenario::{SinkDef, SinkKind};
+use shopfloor_core::scenario::{DOCK, SinkDef, SinkKind, UNDOCK};
 use shopfloor_core::scene::Repeat;
 use shopfloor_core::sinks::{EventSink, SinkMonitor, build_sink};
 use shopfloor_core::trace::{Trace, load_trace};
@@ -218,11 +218,17 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
     println!("Actions ({}):", scenario.actions.len());
     for action in &scenario.actions {
         let mut rules = Vec::new();
-        if action.requires_machine {
-            rules.push("at a machine");
-        }
-        if !action.allowed_while_moving {
-            rules.push("stopped");
+        if action.id == DOCK {
+            rules.push("built in: stopped near a machine's dock, drives onto it");
+        } else if action.id == UNDOCK {
+            rules.push("built in: stopped at a machine's dock, drives 1 m out");
+        } else {
+            if action.requires_machine {
+                rules.push("at a machine");
+            }
+            if !action.allowed_while_moving {
+                rules.push("stopped");
+            }
         }
         if rules.is_empty() {
             rules.push("anywhere, also while moving");

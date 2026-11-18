@@ -146,12 +146,10 @@ pub struct SensorSpec {
 #[serde(deny_unknown_fields)]
 pub struct ActionSpec {
     pub label: Option<String>,
-    /// Only allowed while the MM is docked at a machine.
-    #[serde(default)]
-    pub requires_machine: bool,
-    /// Allowed while the MM is moving (otherwise it must be stopped).
-    #[serde(default)]
-    pub allowed_while_moving: bool,
+    /// Only allowed while the MM is at a machine's dock (default false).
+    pub requires_machine: Option<bool>,
+    /// Allowed while the MM is moving, otherwise it must be stopped (default false).
+    pub allowed_while_moving: Option<bool>,
 }
 
 fn default_name() -> String {

@@ -80,28 +80,6 @@ pub enum EventBody {
         at: Option<String>,
         origin: Origin,
     },
-    /// A docked MM started a move away from its machine (just before the `move_command`).
-    Undock {
-        device_id: String,
-        event: UndockEvent,
-        /// The machine it leaves.
-        target: String,
-        /// The move that takes it away.
-        command_id: u64,
-        x: f64,
-        y: f64,
-    },
-    /// An MM came to rest at a machine's dock (just after the `arrived` or `stopped`).
-    Dock {
-        device_id: String,
-        event: DockEvent,
-        /// The machine it docked at.
-        target: String,
-        /// The move that brought it there.
-        command_id: u64,
-        x: f64,
-        y: f64,
-    },
     /// A sensor reading, with where it was taken (MM position, machine centre or fixed position).
     Sensor {
         /// The sensor's id: `<host>.<name>` when mounted, its own id when free-standing.
@@ -172,22 +150,6 @@ pub enum MoveEvent {
     Move,
 }
 
-/// The `event` of an `undock`: always `"undock"`, as in the traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-pub enum UndockEvent {
-    Undock,
-}
-
-/// The `event` of a `dock`: always `"dock"`, as in the traces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-pub enum DockEvent {
-    Dock,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
@@ -219,8 +181,6 @@ impl SimEvent {
             EventBody::MoveCommand { .. } => "move_command",
             EventBody::Arrived { .. } => "arrived",
             EventBody::Stopped { .. } => "stopped",
-            EventBody::Undock { .. } => "undock",
-            EventBody::Dock { .. } => "dock",
             EventBody::Sensor { .. } => "sensor",
             EventBody::SensorSet { .. } => "sensor_set",
             EventBody::Action { .. } => "action",
@@ -236,8 +196,6 @@ impl SimEvent {
             | EventBody::MoveCommand { device_id, .. }
             | EventBody::Arrived { device_id, .. }
             | EventBody::Stopped { device_id, .. }
-            | EventBody::Undock { device_id, .. }
-            | EventBody::Dock { device_id, .. }
             | EventBody::Sensor { device_id, .. }
             | EventBody::SensorSet { device_id, .. }
             | EventBody::Action { device_id, .. } => Some(device_id),
@@ -252,8 +210,6 @@ pub const EVENT_KINDS: &[&str] = &[
     "move_command",
     "arrived",
     "stopped",
-    "undock",
-    "dock",
     "sensor",
     "sensor_set",
     "action",
@@ -369,37 +325,25 @@ mod tests {
         );
     }
 
+    /// Docking and undocking are actions (when the scenario defines them), as in the traces.
     #[test]
-    fn undock_and_dock() {
-        assert_golden(
-            event(
-                40,
-                4200,
-                EventBody::Undock {
-                    device_id: "mm1".into(),
-                    event: UndockEvent::Undock,
-                    target: "machine1".into(),
-                    command_id: 3,
-                    x: 4.0,
-                    y: 8.0,
-                },
-            ),
-            r#"{"v":1,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}"#,
-        );
+    fn dock_is_an_action() {
         assert_golden(
             event(
                 58,
                 11700,
-                EventBody::Dock {
+                EventBody::Action {
                     device_id: "mm1".into(),
-                    event: DockEvent::Dock,
-                    target: "machine2".into(),
-                    command_id: 3,
-                    x: 10.0,
-                    y: 8.0,
+                    event: "dock".into(),
+                    object: None,
+                    command_id: 4,
+                    x: 11.4,
+                    y: 2.1,
+                    at: Some("machine2".into()),
+                    origin: Origin::Ui,
                 },
             ),
-            r#"{"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}"#,
+            r#"{"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"action","device_id":"mm1","event":"dock","object":null,"command_id":4,"x":11.4,"y":2.1,"at":"machine2","origin":"ui"}"#,
         );
     }
 

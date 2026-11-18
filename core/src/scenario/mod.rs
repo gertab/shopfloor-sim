@@ -23,6 +23,18 @@ pub use spec::{
     ActionSpec, FloorSpec, MachineSpec, MmSpec, ReplaySettings, ScenarioSpec, SensorSpec, SimSettings,
 };
 
+/// The ids of the two docking actions. They exist only in a scenario that defines them, and have
+/// built-in rules: `dock` takes an MM near a machine's dock onto it, `undock` takes it back out.
+pub const DOCK: &str = "dock";
+pub const UNDOCK: &str = "undock";
+/// How near a machine's dock an MM must be for `dock` to take it in (or `dock_tolerance_m`, if larger).
+pub const DOCK_RANGE_M: f64 = 1.0;
+/// Where an MM waits beside a machine (after an `undock`, and in a replay): this far out from the
+/// dock, away from the machine, leaning to one side (alternating by MM) so that two MMs waiting at
+/// the same machine stand apart.
+pub const APPROACH_M: f64 = 1.0;
+const APPROACH_LEAN_RAD: f64 = std::f64::consts::PI / 6.0;
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct Scenario {
@@ -158,6 +170,34 @@ impl Scenario {
             .filter(|(_, distance)| *distance <= self.sim.dock_tolerance_m + 1e-9)
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(machine, _)| machine)
+    }
+
+    /// The machine whose dock is within `range_m` of `point` (closest wins).
+    pub fn machine_dock_within(&self, point: Vec2, range_m: f64) -> Option<&MachineDef> {
+        self.machines
+            .iter()
+            .map(|machine| (machine, machine.dock.distance(point)))
+            .filter(|(_, distance)| *distance <= range_m + 1e-9)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(machine, _)| machine)
+    }
+
+    /// Where MM number `mm_index` waits beside `machine` (see [`APPROACH_M`]).
+    pub fn approach_point(&self, machine: &MachineDef, mm_index: usize, radius_m: f64) -> Vec2 {
+        let out = machine.dock - machine.position;
+        let out = if out.length() > 1e-9 {
+            out.heading()
+        } else {
+            -std::f64::consts::FRAC_PI_2
+        };
+        let lean = if mm_index.is_multiple_of(2) {
+            -APPROACH_LEAN_RAD
+        } else {
+            APPROACH_LEAN_RAD
+        };
+        let direction = Vec2::new((out + lean).cos(), (out + lean).sin());
+        self.reachable_area(radius_m)
+            .clamp(machine.dock + direction.scale(APPROACH_M))
     }
 }
 

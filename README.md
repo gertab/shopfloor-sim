@@ -72,11 +72,11 @@ see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 | Send it to a machine | With an MM selected, click the machine, or use the machine buttons on the MM's card. It drives to the machine's *dock* (the small circle). |
 | Send it to a point | With an MM selected, click anywhere on the floor. A ghost circle shows where it will stop. |
 | Re-target or stop | Give a new target while it moves, and the old move is replaced. **Stop** on its card stops it. |
-| Perform an action | The action buttons (Pick, Place, …) on the MM's card. A greyed-out button says why on hover (e.g. "'pick' needs mm1 at a machine"). |
+| Perform an action | The action buttons (Pick, Place, …) on the MM's card. A greyed-out button says why on hover (e.g. "'pick' needs mm1 at a machine"). Dock and Undock, if the scenario defines them, also move the MM (see [Docking](#docking)). |
 | Change a sensor | **Sensors** on the right: a slider or number field, a button to restore the default, **noise σ** for Gaussian noise, and a pause button that stops its readings, as if it had failed. Click a reading, or a free-standing sensor's diamond, on the floor to jump to its control. Free-standing sensors are under **Floor**. |
 | Pause | **Pause** in the toolbar, or **Space**. |
 | Play a scene | **Scenes** at the top right: **Play** / **Stop**. Each track shows what it waits on, and the toolbar shows the scene and its iteration. Pause applies to the scene too, and manual control still works. |
-| Inspect the output | The bottom panel shows every event. Filter by entity, or by group: **position**, **sensor** (readings), **event** (moves, docking, arrivals, stops and actions) and **sim** (the simulation, scenes and sensor changes). **{}** shows the raw JSON lines that the outputs write. |
+| Inspect the output | The bottom panel shows every event. Filter by entity, or by group: **position**, **sensor** (readings), **event** (moves, arrivals, stops and actions) and **sim** (the simulation, scenes and sensor changes). **{}** shows the raw JSON lines that the outputs write. |
 | Start again, switch scenario | **Reload** re-reads the scenario file and starts again from time 0, and outputs reconnect. **Open** loads another scenario (the picker starts in `scenarios/`). |
 
 ## Scenario files
@@ -163,9 +163,9 @@ readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
 | `... max_speed_mps` | 0.5 | Driving speed (constant) |
 | `... radius_m` | 0.35 | Footprint. The MM's centre stays this far from the walls. |
 | `... actions` | all of `[actions]` | Ids of the actions this MM can perform |
-| `[actions.<id>]` | | An action MMs can perform. It is silent and only emits an `action` event. |
+| `[actions.<id>]` | | An action MMs can perform. It is silent and only emits an `action` event. `dock` and `undock` are built in (see [Docking](#docking)). |
 | `... label` | `<id>` humanised | Button label |
-| `... requires_machine` | false | Only while docked at a machine (within `dock_tolerance_m` of its dock) |
+| `... requires_machine` | false | Only at a machine (within `dock_tolerance_m` of its dock) |
 | `... allowed_while_moving` | false | Otherwise the MM must be stopped |
 | `[<machines\|mobile_manipulators>.<id>.sensors.<name>]` | | A sensor mounted on that entity. Its id is `<id>.<name>`. |
 | `[sensors.<id>]` + `position = [x, y]` | | A free-standing sensor at a fixed spot. It is its own entity (`device_id` = `<id>`) and takes the same keys as below. |
@@ -190,10 +190,32 @@ readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
 Rules worth knowing:
 - Entity ids use letters, digits, `_` and `-`.
 - Machines, MMs and free-standing sensors share one id namespace.
-- Action ids can't be `move`, `dock` or `undock`, since those are the `event` of other events.
+- An action can't be called `move`, the `event` of move commands.
 - Footprints, docks, starts and sensor positions must lie inside the floor.
 - Only free-standing sensors have a `position`. A mounted sensor is where its host is.
 - Periods must be at least `tick_ms`.
+
+### Docking
+
+A move to a machine drives the MM onto its dock. A scenario can also define two built-in actions, which take only a
+`label`:
+
+```toml
+[actions.dock]
+label = "Dock"
+
+[actions.undock]
+```
+
+| Action | When | What it does |
+|---|---|---|
+| `dock` | The MM is stopped within 1 m of a machine's dock (or `dock_tolerance_m`, if larger) | Drives it onto that dock at its speed. Already on it: just the event. |
+| `undock` | The MM is stopped at a machine's dock | Drives it 1 m out, away from the machine and leaning to one side (alternating by MM), as in a replay |
+
+Both emit an `action` event (`event` `"dock"` / `"undock"`, `at` the machine). Until the MM gets there it counts as
+moving: `wait_idle` waits for it, a stop leaves it where it is, and a new move replaces it. Moves themselves emit no
+docking events, so a scene that wants a stream like the Liminal Desk traces performs them: move, `dock`, `pick`,
+`undock`, move.
 
 ## Scenes
 
@@ -339,26 +361,20 @@ Every event is **one flat JSON object** with the same envelope:
 | `move_command` | An MM gets a target | `device_id`, `event` (`"move"`), `source`, `destination` (machine ids or null), `command_id`, `origin`, `from {x,y}`, `to {x,y}`, `distance_m`, `eta_ms`, `replaces` (previous `command_id` or null) |
 | `arrived` | An MM reaches its target | `device_id`, `command_id`, `x`, `y`, `at` |
 | `stopped` | An MM is stopped before arriving | `device_id`, `command_id`, `x`, `y`, `at`, `origin` |
-| `undock` | A docked MM starts a move away from its machine, just before the `move_command` | `device_id`, `event` (`"undock"`), `target` (the machine it leaves), `command_id` (the move), `x`, `y` |
-| `dock` | An MM comes to rest at a machine's dock, just after the `arrived` or `stopped` | `device_id`, `event` (`"dock"`), `target` (the machine), `command_id` (the move), `x`, `y` |
 | `sensor` | Every `period_ms` per sensor | `sensor_id`, `device_id` (host, or the sensor itself if free-standing), `type` (the sensor's kind), `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
 | `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor_id`, `device_id`, `type`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
-| `action` | An MM performs an action (silent: nothing else changes) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
+| `action` | An MM performs an action (silent: nothing else changes, except that `dock` and `undock` move it, see [Docking](#docking)) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
 | `sim` | Started, paused, resumed or reset | `state`, `scenario` |
 | `scene` | A scene starts, restarts (next iteration), finishes, is stopped, or fails | `scene`, `state` (`started`/`restarted`/`finished`/`stopped`/`failed`), `iteration`, `error` (why it failed, else null) |
 
 `at`, `source` and `destination` are the machine id when the point is within `dock_tolerance_m` of that machine's
-dock, otherwise `null`. An MM that starts at a machine (`start_at`) begins docked, without a `dock` event. A move to
-where the MM already is, or a new target for an MM that is already moving, emits neither `undock` nor `dock`. So
-"mm1 moves from machine1 to machine2, then picks there" is:
+dock, otherwise `null`. So "mm1 moves from machine1 to machine2, then picks there" is:
 
 ```json
-{"v":1,"seq":40,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"undock","device_id":"mm1","event":"undock","target":"machine1","command_id":3,"x":4.0,"y":8.0}
 {"v":1,"seq":41,"timestamp_ms":1761730004200,"sim_ms":4200,"kind":"move_command","device_id":"mm1","event":"move","source":"machine1","destination":"machine2","command_id":3,"origin":"ui","from":{"x":4.0,"y":8.0},"to":{"x":10.0,"y":8.0},"distance_m":6.0,"eta_ms":7500,"replaces":null}
 {"v":1,"seq":42,"timestamp_ms":1761730004300,"sim_ms":4300,"kind":"position","device_id":"mm1","x":4.08,"y":8.0,"heading_rad":0.0,"speed_mps":0.8}
 {"v":1,"seq":43,"timestamp_ms":1761730004500,"sim_ms":4500,"kind":"sensor","sensor_id":"mm1.vibration","device_id":"mm1","type":"vibration","value":1.0,"unit":"g","x":4.4,"y":8.0}
 {"v":1,"seq":57,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"arrived","device_id":"mm1","command_id":3,"x":10.0,"y":8.0,"at":"machine2"}
-{"v":1,"seq":58,"timestamp_ms":1761730011700,"sim_ms":11700,"kind":"dock","device_id":"mm1","event":"dock","target":"machine2","command_id":3,"x":10.0,"y":8.0}
 {"v":1,"seq":88,"timestamp_ms":1761730012300,"sim_ms":12300,"kind":"action","device_id":"mm1","event":"pick","object":"dies","command_id":7,"x":10.0,"y":8.0,"at":"machine2","origin":"ui"}
 ```
 
@@ -476,8 +492,7 @@ Writing a pipeline:
   example a `rule` with `condition = { field_path = "kind", operation = "equals", value = "sensor" }`.
 - Liminal's `equals` is strict (`1` ≠ `1.0`), and measurements are floats, so compare numbers with `>`, `<`, `>=`, `<=`.
 - Use `timestamp_ms` as the event time: `timing.event_time_field = "timestamp_ms"`.
-- Route actions on `event`, e.g. `event` equals `"pick"`. No action can be called `move`, `dock` or `undock`, so this
-  matches only actions.
+- Route actions on `event`, e.g. `event` equals `"pick"`. No action can be called `move`, so this matches only actions.
 
 How it behaves:
 - Liminal reconnects every second until the simulator is listening. It logs each failed attempt as an error, which is

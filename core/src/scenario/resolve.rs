@@ -5,7 +5,7 @@ use super::outputs::resolve_output;
 use super::spec::{
     ActionSpec, FloorSpec, MachineSpec, MmSpec, ReplaySettings, ScenarioSpec, SensorSpec, SimSettings,
 };
-use super::{ActionDef, Floor, HostKind, MachineDef, MmDef, Scenario, SensorDef};
+use super::{ActionDef, DOCK, Floor, HostKind, MachineDef, MmDef, Scenario, SensorDef, UNDOCK};
 use crate::geometry::{Rect, Vec2};
 use crate::scene::resolve_scenes;
 use anyhow::bail;
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 const DEFAULT_DOCK_GAP_M: f64 = 0.5;
 
 /// The `event` values of `move_command`, `dock` and `undock`, so no action may use them.
-const RESERVED_ACTION_IDS: &[&str] = &["move", "dock", "undock"];
+const RESERVED_ACTION_IDS: &[&str] = &["move"];
 
 pub(super) fn resolve(spec: ScenarioSpec, source_path: Option<&Path>) -> anyhow::Result<Scenario> {
     let mut errors = Vec::new();
@@ -134,15 +134,23 @@ fn resolve_actions(specs: &BTreeMap<String, ActionSpec>, errors: &mut Vec<String
         }
         if RESERVED_ACTION_IDS.contains(&id.as_str()) {
             errors.push(format!(
-                "action '{id}' is reserved: an action's id is its event's `event`, which is also \
-                 \"move\", \"dock\" or \"undock\" for those events"
+                "action '{id}' is reserved: an action's id is its event's `event`, and \"move\" is the \
+                 `event` of move commands"
+            ));
+        }
+        if (id == DOCK || id == UNDOCK)
+            && (action.requires_machine.is_some() || action.allowed_while_moving.is_some())
+        {
+            errors.push(format!(
+                "action '{id}' has built-in rules, so it takes only a `label` \
+                 (no `requires_machine` or `allowed_while_moving`)"
             ));
         }
         actions.push(ActionDef {
             id: id.clone(),
             label: action.label.clone().unwrap_or_else(|| humanize(id)),
-            requires_machine: action.requires_machine,
-            allowed_while_moving: action.allowed_while_moving,
+            requires_machine: action.requires_machine.unwrap_or(false),
+            allowed_while_moving: action.allowed_while_moving.unwrap_or(false),
         });
     }
     actions

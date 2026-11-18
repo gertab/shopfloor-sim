@@ -12,12 +12,12 @@
 
 use crate::command::{CommandEnvelope, Control, Origin, SimCommand, Target};
 use crate::event::{
-    DockEvent, EventBody, HEADING_DECIMALS, Lifecycle, MoveEvent, POSITION_DECIMALS, Point, SCHEMA_VERSION,
-    SimEvent, UndockEvent, VALUE_DECIMALS,
+    EventBody, HEADING_DECIMALS, Lifecycle, MoveEvent, POSITION_DECIMALS, Point, SCHEMA_VERSION, SimEvent,
+    VALUE_DECIMALS,
 };
 use crate::geometry::{Vec2, path_length, round_to};
 use crate::motion::{PathPlanner, StraightLine};
-use crate::scenario::{HostKind, MmDef, Scenario};
+use crate::scenario::{DOCK, DOCK_RANGE_M, HostKind, MmDef, Scenario, UNDOCK};
 use crate::scene::{ScenePlayer, SceneStatus};
 use anyhow::{anyhow, bail};
 use rand::SeedableRng;
@@ -58,9 +58,6 @@ struct MmState {
     position: Vec2,
     heading: f64,
     motion: Option<Motion>,
-    /// The machine it is docked at: set by a `dock` event (or starting at a machine), cleared by an
-    /// `undock`.
-    docked: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +68,15 @@ struct Motion {
     next: usize,
     target: Place,
     next_position_ms: u64,
+    kind: MotionKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MotionKind {
+    /// A move command: ends with `arrived`.
+    Move,
+    /// A `dock` or `undock` action taking the MM onto or off a dock: ends without another event.
+    Docking,
 }
 
 impl Motion {
@@ -302,18 +308,22 @@ impl Engine {
             }
 
             if motion.remaining().is_empty() {
-                let command_id = motion.command_id;
-                let at = motion.target.at.clone();
-                mm.motion = None;
-                bodies.push(position_body(&def.id, mm, 0.0));
-                bodies.push(EventBody::Arrived {
-                    device_id: def.id.clone(),
+                let Motion {
                     command_id,
-                    x: round_to(mm.position.x, POSITION_DECIMALS),
-                    y: round_to(mm.position.y, POSITION_DECIMALS),
-                    at: at.clone(),
-                });
-                bodies.extend(dock(&def.id, mm, command_id, at));
+                    target,
+                    kind,
+                    ..
+                } = mm.motion.take().expect("moving");
+                bodies.push(position_body(&def.id, mm, 0.0));
+                if kind == MotionKind::Move {
+                    bodies.push(EventBody::Arrived {
+                        device_id: def.id.clone(),
+                        command_id,
+                        x: round_to(mm.position.x, POSITION_DECIMALS),
+                        y: round_to(mm.position.y, POSITION_DECIMALS),
+                        at: target.at,
+                    });
+                }
             } else if now >= motion.next_position_ms {
                 while motion.next_position_ms <= now {
                     motion.next_position_ms += interval_ms;
@@ -437,9 +447,6 @@ impl Engine {
                 position: def.start,
                 heading: def.start_heading_rad,
                 motion: None,
-                docked: scenario
-                    .machine_docked_at(def.start)
-                    .map(|machine| machine.id.clone()),
             })
             .collect();
         self.sensors = scenario
@@ -504,18 +511,6 @@ impl Engine {
 
         let mut bodies = Vec::new();
         let mm = &mut self.mms[index];
-        if distance_m > ARRIVAL_EPS_M
-            && let Some(machine) = mm.docked.take()
-        {
-            bodies.push(EventBody::Undock {
-                device_id: def.id.clone(),
-                event: UndockEvent::Undock,
-                target: machine,
-                command_id,
-                x: from.x,
-                y: from.y,
-            });
-        }
         bodies.push(EventBody::MoveCommand {
             device_id: def.id.clone(),
             event: MoveEvent::Move,
@@ -537,9 +532,8 @@ impl Engine {
                 command_id,
                 x: to.x,
                 y: to.y,
-                at: to.at.clone(),
+                at: to.at,
             });
-            bodies.extend(dock(&def.id, mm, command_id, to.at));
         } else {
             mm.motion = Some(Motion {
                 command_id,
@@ -547,6 +541,7 @@ impl Engine {
                 next: 0,
                 target: to,
                 next_position_ms: self.sim_ms + scenario.output.position_interval_ms,
+                kind: MotionKind::Move,
             });
         }
         Ok(bodies)
@@ -559,16 +554,14 @@ impl Engine {
         };
         let position = self.mms[index].position;
         let at = self.docked_at(position);
-        let mut bodies = vec![EventBody::Stopped {
+        Ok(vec![EventBody::Stopped {
             device_id: mm_id.to_string(),
             command_id: motion.command_id,
             x: round_to(position.x, POSITION_DECIMALS),
             y: round_to(position.y, POSITION_DECIMALS),
-            at: at.clone(),
+            at,
             origin,
-        }];
-        bodies.extend(dock(mm_id, &mut self.mms[index], motion.command_id, at));
-        Ok(bodies)
+        }])
     }
 
     fn set_sensor(
@@ -638,7 +631,40 @@ impl Engine {
         }
         let command_id = self.next_command_id;
         self.next_command_id += 1;
+        let scenario = Arc::clone(&self.scenario);
+        let def = &scenario.mobile_manipulators[index];
         let position = self.mms[index].position;
+        // `dock` and `undock` also take the MM onto or off a dock (checked by `action_blocker`).
+        let (at, docking) = match action {
+            DOCK => {
+                let machine = scenario
+                    .machine_dock_within(position, self.dock_range())
+                    .expect("checked: near a dock");
+                (Some(machine.id.clone()), Some(machine.dock))
+            }
+            UNDOCK => {
+                let machine = scenario.machine_docked_at(position).expect("checked: at a dock");
+                let out = scenario.approach_point(machine, index, def.radius_m);
+                (Some(machine.id.clone()), Some(out))
+            }
+            _ => (self.docked_at(position), None),
+        };
+        if let Some(to) = docking
+            && position.distance(to) > ARRIVAL_EPS_M
+        {
+            self.mms[index].motion = Some(Motion {
+                command_id,
+                waypoints: vec![to],
+                next: 0,
+                target: Place {
+                    x: round_to(to.x, POSITION_DECIMALS),
+                    y: round_to(to.y, POSITION_DECIMALS),
+                    at: self.docked_at(to),
+                },
+                next_position_ms: self.sim_ms + scenario.output.position_interval_ms,
+                kind: MotionKind::Docking,
+            });
+        }
         Ok(vec![EventBody::Action {
             device_id: mm_id.to_string(),
             event: action.to_string(),
@@ -646,7 +672,7 @@ impl Engine {
             command_id,
             x: round_to(position.x, POSITION_DECIMALS),
             y: round_to(position.y, POSITION_DECIMALS),
-            at: self.docked_at(position),
+            at,
             origin,
         }])
     }
@@ -674,6 +700,20 @@ impl Engine {
         if mm.motion.is_some() && !action.allowed_while_moving {
             return Some(format!("'{action_id}' needs {} to be stopped", def.id));
         }
+        // Docking has built-in rules (see `DOCK` / `UNDOCK`).
+        let range = self.dock_range();
+        if action_id == DOCK && scenario.machine_dock_within(mm.position, range).is_none() {
+            return Some(format!(
+                "'dock' needs {} within {range} m of a machine's dock; it is at ({:.1}, {:.1})",
+                def.id, mm.position.x, mm.position.y
+            ));
+        }
+        if action_id == UNDOCK && scenario.machine_docked_at(mm.position).is_none() {
+            return Some(format!(
+                "'undock' needs {} at a machine's dock; it is at ({:.1}, {:.1})",
+                def.id, mm.position.x, mm.position.y
+            ));
+        }
         if action.requires_machine && self.docked_at(mm.position).is_none() {
             return Some(format!(
                 "'{action_id}' needs {} at a machine; it is at ({:.1}, {:.1})",
@@ -695,6 +735,12 @@ impl Engine {
                 )
             )
         })
+    }
+
+    /// How near a dock `dock` works: [`DOCK_RANGE_M`], or the scenario's `dock_tolerance_m` if that is
+    /// larger (an MM "at" a machine can always dock).
+    fn dock_range(&self) -> f64 {
+        DOCK_RANGE_M.max(self.scenario.sim.dock_tolerance_m)
     }
 
     fn docked_at(&self, point: Vec2) -> Option<String> {
@@ -734,23 +780,6 @@ fn position_body(id: &str, mm: &MmState, speed_mps: f64) -> EventBody {
         heading_rad: round_to(mm.heading, HEADING_DECIMALS),
         speed_mps,
     }
-}
-
-/// The `dock` event for an MM that came to rest `at` a machine, unless it was docked there already.
-fn dock(id: &str, mm: &mut MmState, command_id: u64, at: Option<String>) -> Option<EventBody> {
-    let machine = at?;
-    if mm.docked.as_ref() == Some(&machine) {
-        return None;
-    }
-    mm.docked = Some(machine.clone());
-    Some(EventBody::Dock {
-        device_id: id.to_string(),
-        event: DockEvent::Dock,
-        target: machine,
-        command_id,
-        x: round_to(mm.position.x, POSITION_DECIMALS),
-        y: round_to(mm.position.y, POSITION_DECIMALS),
-    })
 }
 
 fn eta_ms(distance_m: f64, speed_mps: f64) -> u64 {

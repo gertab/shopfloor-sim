@@ -6,10 +6,6 @@ use crate::engine::Place;
 use crate::geometry::Vec2;
 use crate::scenario::{MachineDef, Scenario};
 
-/// Where an MM waits beside a machine: this far out from its dock, away from the machine, leaning to
-/// one side (alternating by MM) so that two MMs waiting at the same machine stand apart.
-const APPROACH_M: f64 = 1.0;
-const APPROACH_LEAN_RAD: f64 = std::f64::consts::PI / 6.0;
 /// How long docking and undocking take at most: the MM glides between its approach point and the
 /// dock.
 const GLIDE_MS: u64 = 1000;
@@ -103,25 +99,6 @@ impl Track {
     }
 }
 
-/// Where MM number `mm_index` waits beside `machine` (see [`APPROACH_M`]).
-fn approach(scenario: &Scenario, machine: &MachineDef, mm_index: usize, radius_m: f64) -> Vec2 {
-    let out = machine.dock - machine.position;
-    let out = if out.length() > 1e-9 {
-        out.heading()
-    } else {
-        -std::f64::consts::FRAC_PI_2
-    };
-    let lean = if mm_index.is_multiple_of(2) {
-        -APPROACH_LEAN_RAD
-    } else {
-        APPROACH_LEAN_RAD
-    };
-    let direction = Vec2::new((out + lean).cos(), (out + lean).sin());
-    scenario
-        .reachable_area(radius_m)
-        .clamp(machine.dock + direction.scale(APPROACH_M))
-}
-
 /// Where `def` is over time: it glides out of a dock on `undock`, drives between approach points
 /// on `move`, and glides into a dock on `dock`. Also checks that its events follow on from each
 /// other.
@@ -140,7 +117,7 @@ pub(super) fn build_track(
         .filter(|item| item.payload.device_id.as_deref() == Some(id) && item.payload.event.is_some())
         .collect();
     let machine_of = |name: &Option<String>| name.as_deref().and_then(|name| scenario.machine(name));
-    let approach_of = |machine: &MachineDef| approach(scenario, machine, mm_index, def.radius_m);
+    let approach_of = |machine: &MachineDef| scenario.approach_point(machine, mm_index, def.radius_m);
 
     // Before its first event, the MM is where that event implies (docked before an undock, at the
     // approach point before a move or a dock), else at its start.
