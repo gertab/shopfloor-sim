@@ -1,0 +1,925 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 22.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000000000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.8,
+        "unit": "%",
+        "timestamp_ms": 1795000000000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.123,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000000000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.111,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000000000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 22.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000002000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.9,
+        "unit": "%",
+        "timestamp_ms": 1795000002000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.856,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000002000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.12,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000002000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 21.9,
+        "unit": "°C",
+        "timestamp_ms": 1795000004000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.0,
+        "unit": "%",
+        "timestamp_ms": 1795000004000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.857,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000004000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.112,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000004000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 22.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000006000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.2,
+        "unit": "%",
+        "timestamp_ms": 1795000006000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.862,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000006000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.114,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000006000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 22.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000008000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.3,
+        "unit": "%",
+        "timestamp_ms": 1795000008000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.908,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000008000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.118,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000008000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 22.1,
+        "unit": "°C",
+        "timestamp_ms": 1795000010000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.7,
+        "unit": "%",
+        "timestamp_ms": 1795000010000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.127,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000010000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.116,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000010000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 24.9,
+        "unit": "°C",
+        "timestamp_ms": 1795000012000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.8,
+        "unit": "%",
+        "timestamp_ms": 1795000012000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.881,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000012000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.126,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000012000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 28.9,
+        "unit": "°C",
+        "timestamp_ms": 1795000014000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.0,
+        "unit": "%",
+        "timestamp_ms": 1795000014000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.914,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000014000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.117,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000014000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 33.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000016000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.7,
+        "unit": "%",
+        "timestamp_ms": 1795000016000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.856,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000016000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.114,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000016000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 36.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000018000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.0,
+        "unit": "%",
+        "timestamp_ms": 1795000018000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.881,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000018000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.122,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000018000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 37.6,
+        "unit": "°C",
+        "timestamp_ms": 1795000020000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.9,
+        "unit": "%",
+        "timestamp_ms": 1795000020000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.126,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000020000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.92,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000020000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 37.9,
+        "unit": "°C",
+        "timestamp_ms": 1795000022000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.0,
+        "unit": "%",
+        "timestamp_ms": 1795000022000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.121,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000022000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.938,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000022000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 38.1,
+        "unit": "°C",
+        "timestamp_ms": 1795000024000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.9,
+        "unit": "%",
+        "timestamp_ms": 1795000024000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.13,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000024000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.862,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000024000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 35.2,
+        "unit": "°C",
+        "timestamp_ms": 1795000026000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.2,
+        "unit": "%",
+        "timestamp_ms": 1795000026000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.113,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000026000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.12,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000026000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 32.3,
+        "unit": "°C",
+        "timestamp_ms": 1795000028000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.1,
+        "unit": "%",
+        "timestamp_ms": 1795000028000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.125,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000028000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.121,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000028000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 30.1,
+        "unit": "°C",
+        "timestamp_ms": 1795000030000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.9,
+        "unit": "%",
+        "timestamp_ms": 1795000030000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.124,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000030000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.909,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000030000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 28.0,
+        "unit": "°C",
+        "timestamp_ms": 1795000032000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.0,
+        "unit": "%",
+        "timestamp_ms": 1795000032000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.127,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000032000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.944,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000032000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 26.4,
+        "unit": "°C",
+        "timestamp_ms": 1795000034000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.1,
+        "unit": "%",
+        "timestamp_ms": 1795000034000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.111,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000034000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.92,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000034000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 25.2,
+        "unit": "°C",
+        "timestamp_ms": 1795000036000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.3,
+        "unit": "%",
+        "timestamp_ms": 1795000036000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.126,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000036000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.116,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000036000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 24.2,
+        "unit": "°C",
+        "timestamp_ms": 1795000038000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 45.1,
+        "unit": "%",
+        "timestamp_ms": 1795000038000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.11,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000038000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.119,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000038000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 2000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "temperature",
+        "device_id": "inspector",
+        "value": 23.4,
+        "unit": "°C",
+        "timestamp_ms": 1795000040000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "humidity",
+        "device_id": "humidity",
+        "value": 44.8,
+        "unit": "%",
+        "timestamp_ms": 1795000040000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-1",
+        "value": 0.111,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000040000
+      }
+    },
+    {
+      "type": "send",
+      "payload": {
+        "type": "vibration",
+        "device_id": "mm-2",
+        "value": 0.125,
+        "unit": "m/s^2",
+        "timestamp_ms": 1795000040000
+      }
+    }
+  ]
+}

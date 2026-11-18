@@ -1,0 +1,149 @@
+# An inspection cell, with three short Liminal Desk traces to replay on it (see "Replaying traces" in the README).
+#
+# mm-1 brings wafers from the loader to the inspector and goes back; the inspector heats up while it inspects
+# them; then mm-2 takes the inspected wafers from the inspector to the shelf. About 40 s, in three files played
+# side by side: one per MM (mm-1.json, mm-2.json) and one with every sensor reading (sensors.json).
+#
+# Everything the traces use is defined here: both MMs, the three machines, the four sensors (one on each MM, one
+# on the inspector, one standing on its own), and the actions pick, place, dock and undock.
+#
+#   cargo run --bin shopfloor -- replay scenarios/replay-example-2/inspection-cell.toml   # real time, about 40 s
+#   cargo run --bin shopfloor -- check scenarios/replay-example-2/inspection-cell.toml    # check the traces against it
+#
+# In the app it simulates like any other scenario; the Replay section on the right starts the replay.
+#
+# Units: metres, seconds.
+
+name = "Inspection cell"
+
+[sim]
+tick_ms = 20
+seed = 5
+start_paused = true      # opens paused in the app: Resume (or Space) starts the clock
+dock_tolerance_m = 0.9   # an MM this close to a dock is "at" that machine
+
+[floor]
+width_m = 14.0
+height_m = 9.0
+grid_m = 1.0
+
+# --- Machines: in a row, each docked from below (0.5 m under its footprint) --------------------------
+
+[machines.loader]
+label = "Loader"
+position = [2.0, 6.5]
+size = [2.5, 1.5]        # dock (2.0, 5.25)
+
+[machines.inspector]
+label = "Inspector"
+position = [7.0, 6.5]
+size = [3.0, 1.5]        # dock (7.0, 5.25)
+
+# The inspector's temperature: a reading with `"device_id": "inspector", "type": "temperature"`.
+[machines.inspector.sensors.temperature]
+unit = "°C"
+default = 22.0
+range = [0.0, 80.0]
+period_ms = 2000
+
+[machines.shelf]
+label = "Shelf"
+position = [12.0, 6.5]
+size = [2.5, 1.5]        # dock (12.0, 5.25)
+
+# --- A sensor standing on its own: `"device_id": "humidity", "type": "humidity"` ------------------------
+
+[sensors.humidity]
+label = "Hall humidity"
+position = [7.0, 1.5]
+unit = "%"
+default = 45.0
+range = [0.0, 100.0]
+period_ms = 2000
+
+# --- Mobile manipulators, where the traces start them ----------------------------------------------
+
+[mobile_manipulators.mm-1]
+label = "MM 1"
+start_at = "loader"
+max_speed_mps = 0.8
+
+[mobile_manipulators.mm-1.sensors.vibration]
+unit = "m/s^2"
+default = 0.12
+range = [0.0, 5.0]
+period_ms = 2000
+
+[mobile_manipulators.mm-2]
+label = "MM 2"
+start_at = "shelf"
+max_speed_mps = 0.8
+
+[mobile_manipulators.mm-2.sensors.vibration]
+unit = "m/s^2"
+default = 0.12
+range = [0.0, 5.0]
+period_ms = 2000
+
+# --- Actions ---------------------------------------------------------------------------------------
+
+[actions.pick]
+label = "Pick"
+requires_machine = true
+
+[actions.place]
+label = "Place"
+requires_machine = true
+
+# Docking, as in the traces: near a machine's dock, `dock` drives the MM onto it; at a dock, `undock`
+# drives it 1 m out (see "Docking" in the README).
+[actions.dock]
+label = "Dock"
+
+[actions.undock]
+label = "Undock"
+
+# --- Replay: what the Replay section (and `shopfloor replay`) starts with --------------------------
+
+[replay]
+traces = ["mm-1.json", "mm-2.json", "sensors.json"]   # relative to this file, played side by side
+format = "payload"       # each payload as written; "envelope" adds v, seq, sim_ms and kind in front
+positions = false        # true: also report the positions of moving MMs
+
+# --- Output ----------------------------------------------------------------------------------------
+
+[output]
+position_interval_ms = 100
+
+# Stream every message over TCP to each client that connects.
+[output.sinks.tcp]
+type = "tcp"
+bind = "127.0.0.1:9000"
+
+# Publish to MQTT topics under inspection/ (a broker such as Mosquitto on localhost:1883).
+[output.sinks.mqtt]
+type = "mqtt"
+broker = "127.0.0.1:1883"
+
+[[output.sinks.mqtt.topics]]
+topic = "inspection/sensors"
+kinds = ["sensor"]
+
+[[output.sinks.mqtt.topics]]
+topic = "inspection/events"
+kinds = ["action", "move_command"]
+
+[[output.sinks.mqtt.topics]]
+topic = "inspection/mm-1"
+entities = ["mm-1"]
+
+[[output.sinks.mqtt.topics]]
+topic = "inspection/mm-2"
+entities = ["mm-2"]
+
+[[output.sinks.mqtt.topics]]
+topic = "inspection/all"
+
+# Every message as a JSON line on stdout (the terminal running the app or the CLI).
+[output.sinks.terminal]
+type = "stdout"

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "type": "delay",
+      "duration_ms": 18000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "shelf",
+        "timestamp_ms": 1795000018000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "move",
+        "source": "shelf",
+        "destination": "inspector",
+        "timestamp_ms": 1795000019000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 7000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "inspector",
+        "timestamp_ms": 1795000026000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "pick",
+        "object": "inspected-wafers",
+        "timestamp_ms": 1795000027000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "undock",
+        "target": "inspector",
+        "timestamp_ms": 1795000028000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "move",
+        "source": "inspector",
+        "destination": "shelf",
+        "timestamp_ms": 1795000029000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 7000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "dock",
+        "target": "shelf",
+        "timestamp_ms": 1795000036000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-2",
+        "event": "place",
+        "object": "inspected-wafers",
+        "timestamp_ms": 1795000037000
+      }
+    }
+  ]
+}

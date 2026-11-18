@@ -433,6 +433,36 @@ fn the_die_processing_traces_fit_their_scenario() {
     assert_eq!((mm1.at.as_deref(), mm2.at.as_deref()), (None, None));
 }
 
+/// The bundled inspection cell: three short traces (one per MM, one for sensors) that use only what
+/// the scenario defines.
+#[test]
+fn the_inspection_traces_fit_their_scenario() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../scenarios/replay-inspection/inspection-cell.toml");
+    let scenario = Arc::new(crate::scenario::load_scenario(&path).unwrap());
+    let traces = scenario.replay.as_ref().unwrap().traces.clone();
+    assert_eq!(traces.len(), 3);
+    let (mut replay, findings) =
+        Replay::from_files(Arc::clone(&scenario), &traces, ReplayOptions::default(), START_TS).unwrap();
+    assert_eq!(findings, vec![]);
+    let status = replay.state().replay.unwrap();
+    assert_eq!((status.total, status.duration_ms), (100, 40_000));
+
+    // At the end each MM is back on its home dock, and the readings have reached the sensors.
+    play(&mut replay);
+    let state = replay.state();
+    let at: Vec<Option<&str>> = state
+        .mobile_manipulators
+        .iter()
+        .map(|mm| mm.at.as_deref())
+        .collect();
+    assert_eq!(at, vec![Some("loader"), Some("shelf")]);
+    let value = |id: &str| state.sensors.iter().find(|s| s.id == id).unwrap().last_value;
+    let temperature = value("inspector.temperature").unwrap();
+    assert!((23.0..24.0).contains(&temperature), "cooled down: {temperature}");
+    assert!(value("humidity").is_some());
+}
+
 fn messages_of(findings: &[Finding]) -> Vec<String> {
     findings.iter().map(Finding::to_string).collect()
 }

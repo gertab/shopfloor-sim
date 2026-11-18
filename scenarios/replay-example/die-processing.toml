@@ -1,11 +1,9 @@
-# A die-processing shopfloor, with Liminal Desk traces to replay on it (see "Replaying Liminal Desk traces" in the README).
+# A die-processing shopfloor, with Liminal Desk traces to replay on it (see "Replaying traces" in the README).
 #
-# Dies go from the stocker to the bonder, the encaser and the deflasher, and back to the stocker each time,
-# carried by two mobile manipulators. The ids match the traces' `device_id`, `target`, `source` and
-# `destination`, so their events can be drawn on this floor.
+# Dies go from the stocker to the bonder, the encaser and the deflasher, and back to the stocker each time, carried by two mobile manipulators. The ids match the traces' `device_id`, `target`, `source` and `destination`, so their events can be drawn on this floor.
 #
-#   cargo run --bin shopfloor -- replay scenarios/die-processing/die-processing.toml   # real time, about 66 s
-#   cargo run --bin shopfloor -- check scenarios/die-processing/die-processing.toml    # check the traces against it
+#   cargo run --bin shopfloor -- replay scenarios/replay-example/die-processing.toml   # real time, about 66 s
+#   cargo run --bin shopfloor -- check scenarios/replay-example/die-processing.toml    # check the traces against it
 #
 # In the app it simulates like any other scenario; the Replay section on the right starts the replay.
 #

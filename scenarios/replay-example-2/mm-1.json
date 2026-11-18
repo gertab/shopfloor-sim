@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "pick",
+        "object": "wafers",
+        "timestamp_ms": 1795000000000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "loader",
+        "timestamp_ms": 1795000001000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "loader",
+        "destination": "inspector",
+        "timestamp_ms": 1795000002000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 7000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "inspector",
+        "timestamp_ms": 1795000009000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "place",
+        "object": "wafers",
+        "timestamp_ms": 1795000010000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "undock",
+        "target": "inspector",
+        "timestamp_ms": 1795000011000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 1000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "move",
+        "source": "inspector",
+        "destination": "loader",
+        "timestamp_ms": 1795000012000
+      }
+    },
+    {
+      "type": "delay",
+      "duration_ms": 7000
+    },
+    {
+      "type": "send",
+      "payload": {
+        "device_id": "mm-1",
+        "event": "dock",
+        "target": "loader",
+        "timestamp_ms": 1795000019000
+      }
+    }
+  ]
+}

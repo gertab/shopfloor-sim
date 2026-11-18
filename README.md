@@ -139,6 +139,7 @@ Open it in the app, or run it with `cargo run --bin shopfloor -- run scenarios/s
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | stdout, TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | stdout, TCP |
 | [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing shopfloor (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it and the docking actions | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
+| [replay-example-2/inspection-cell.toml](scenarios/replay-example-2/inspection-cell.toml) | An inspection cell (loader, inspector, shelf), with three short traces to replay on it: one per MM and one for sensors, about 40 s | 14×9 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `inspection/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size: machines and MMs are drawn to scale, and text and markers scale with the floor so they stay
@@ -410,7 +411,9 @@ cargo run --bin shopfloor -- check scenarios/replay-example/die-processing.toml 
 ```
 
 The scenario provides the layout and the outputs, and it can name its traces in a `[replay]` section, as
-[scenarios/replay-example/](scenarios/replay-example/) does. These are what `shopfloor replay` plays when given no
+[scenarios/replay-example/](scenarios/replay-example/) does. [scenarios/replay-example-2/](scenarios/replay-example-2/)
+is a shorter example (about 40 s, 100 payloads) of several traces side by side: one per MM, and one with the readings of
+a sensor on each MM, one on a machine and one standing on its own. These are what `shopfloor replay` plays when given no
 trace files, and what the app's Replay section starts with. Until a replay starts, the scenario simulates as usual.
 
 ```toml
