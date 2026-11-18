@@ -266,13 +266,17 @@ impl Resolver {
                     None
                 }
             };
-            let start = start.unwrap_or_default();
-            if positive(mm.radius_m) && !self.floor.inset(mm.radius_m).contains(start) {
+            // Only a start that resolved can be outside the floor: an unresolved one is already an error.
+            if let Some(start) = start
+                && positive(mm.radius_m)
+                && !self.floor.inset(mm.radius_m).contains(start)
+            {
                 self.errors.push(format!(
                     "mobile_manipulators.{id} starts outside the floor ({:.2}, {:.2})",
                     start.x, start.y
                 ));
             }
+            let start = start.unwrap_or_default();
             let sensor_ids = self.mounted_sensors(id, HostKind::MobileManipulator, &mm.sensors);
             let mm_actions = match &mm.actions {
                 None => actions.iter().map(|action| action.id.clone()).collect(),

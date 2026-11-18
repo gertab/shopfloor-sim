@@ -108,6 +108,20 @@ fn requires_exactly_one_start() {
 }
 
 #[test]
+fn an_unresolved_start_is_one_error() {
+    for text in [
+        MINIMAL.replace("start_at = \"machine1\"", "start_at = \"machine9\""),
+        MINIMAL.replace(
+            "start_at = \"machine1\"",
+            "start_at = \"machine1\"\nstart = [1.0, 1.0]",
+        ),
+    ] {
+        let errors = errors_of(&text);
+        assert!(!errors.contains("starts outside the floor"), "{errors}");
+    }
+}
+
+#[test]
 fn resolves_relative_sink_paths_against_scenario_file() {
     let text = format!(
         "{MINIMAL}\n[output.sinks.rec]\ntype = \"jsonl\"\npath = \"../recordings/a.jsonl\"\n\n[output.sinks.term]\ntype = \"stdout\"\n"
@@ -129,6 +143,36 @@ fn resolves_relative_sink_paths_against_scenario_file() {
             },
         ]
     );
+}
+
+#[test]
+fn rejects_tcp_binds_that_cannot_listen() {
+    let tcp =
+        |name: &str, bind: &str| format!("\n[output.sinks.{name}]\ntype = \"tcp\"\nbind = \"{bind}\"\n");
+    let errors = errors_of(&format!("{MINIMAL}{}", tcp("a", "notanaddress")));
+    assert!(
+        errors.contains("output.sinks.a.bind: 'notanaddress' is not a listen address"),
+        "{errors}"
+    );
+    let errors = errors_of(&format!("{MINIMAL}{}", tcp("a", "127.0.0.1:99999")));
+    assert!(errors.contains("has an invalid port"), "{errors}");
+    let errors = errors_of(&format!(
+        "{MINIMAL}{}{}",
+        tcp("a", "127.0.0.1:9000"),
+        tcp("b", "127.0.0.1:9000")
+    ));
+    assert!(
+        errors.contains("'127.0.0.1:9000' is also output.sinks.a.bind"),
+        "{errors}"
+    );
+    // Different ports, or port 0 (any free port) twice, are fine.
+    let text = format!(
+        "{MINIMAL}{}{}{}",
+        tcp("a", "127.0.0.1:9000"),
+        tcp("b", "127.0.0.1:0"),
+        tcp("c", "127.0.0.1:0")
+    );
+    assert!(parse_scenario(&text, None).is_ok());
 }
 
 #[test]

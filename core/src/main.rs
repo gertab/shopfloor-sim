@@ -186,14 +186,26 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
             ""
         }
     );
+    // One column for every id, wide enough for the longest (e.g. `deflasher.temperature`).
+    let w = scenario
+        .machines
+        .iter()
+        .map(|machine| machine.id.len())
+        .chain(scenario.mobile_manipulators.iter().map(|mm| mm.id.len()))
+        .chain(scenario.sensors.iter().map(|sensor| sensor.id.len()))
+        .chain(scenario.actions.iter().map(|action| action.id.len()))
+        .chain(scenario.scenes.iter().map(|scene| scene.id.len()))
+        .max()
+        .unwrap_or(0)
+        .max(18);
     println!("Machines ({}):", scenario.machines.len());
     for machine in &scenario.machines {
-        println!("  {:<18} {}", machine.id, machine.label);
+        println!("  {:<w$} {}", machine.id, machine.label);
     }
     println!("Mobile manipulators ({}):", scenario.mobile_manipulators.len());
     for mm in &scenario.mobile_manipulators {
         println!(
-            "  {:<18} {} · actions: {}",
+            "  {:<w$} {} · actions: {}",
             mm.id,
             mm.label,
             list_or_none(&mm.actions)
@@ -201,7 +213,7 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
     }
     println!("Sensors ({}):", scenario.sensors.len());
     for sensor in &scenario.sensors {
-        println!("  {:<18} {} [{}]", sensor.id, sensor.kind, sensor.unit);
+        println!("  {:<w$} {} [{}]", sensor.id, sensor.kind, sensor.unit);
     }
     println!("Actions ({}):", scenario.actions.len());
     for action in &scenario.actions {
@@ -212,7 +224,10 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
         if !action.allowed_while_moving {
             rules.push("stopped");
         }
-        println!("  {:<18} {} ({})", action.id, action.label, rules.join(", "));
+        if rules.is_empty() {
+            rules.push("anywhere, also while moving");
+        }
+        println!("  {:<w$} {} ({})", action.id, action.label, rules.join(", "));
     }
     println!("Scenes ({}):", scenario.scenes.len());
     for scene in &scenario.scenes {
@@ -227,7 +242,7 @@ fn check(path: &Path, traces: Vec<PathBuf>) -> anyhow::Result<ExitCode> {
             .map(|track| format!("{} ({} steps)", track.name, track.steps.len()))
             .collect();
         println!(
-            "  {:<18} {} · {repeat} · {}",
+            "  {:<w$} {} · {repeat} · {}",
             scene.id,
             scene.label,
             tracks.join(", ")
@@ -531,7 +546,7 @@ fn describe_sink(sink: &SinkDef) -> String {
     match &sink.kind {
         SinkKind::Stdout => format!("{} (stdout)", sink.name),
         SinkKind::Jsonl { path, .. } => format!("{} (jsonl -> {})", sink.name, path.display()),
-        SinkKind::Tcp { bind } => format!("{} (tcp, listening on {bind})", sink.name),
+        SinkKind::Tcp { bind } => format!("{} (tcp on {bind})", sink.name),
         SinkKind::Mqtt { broker, topics, .. } => {
             let topics: Vec<&str> = topics.iter().map(|topic| topic.topic.as_str()).collect();
             format!("{} (mqtt -> {broker}: {})", sink.name, topics.join(", "))

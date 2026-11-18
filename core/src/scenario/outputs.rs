@@ -114,6 +114,24 @@ pub(crate) fn parse_broker(broker: &str) -> Result<(String, u16), String> {
     Ok((host.to_string(), port))
 }
 
+/// Host and port of a TCP listen address: `host:port`, e.g. `127.0.0.1:9000` (port 0 picks a free
+/// port).
+fn parse_bind(bind: &str) -> Result<(String, u16), String> {
+    let (host, port) = bind
+        .trim()
+        .rsplit_once(':')
+        .ok_or_else(|| format!("'{bind}' is not a listen address (host:port, e.g. 127.0.0.1:9000)"))?;
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| format!("'{bind}' has an invalid port"))?;
+    if host.is_empty() || host.contains('/') {
+        return Err(format!(
+            "'{bind}' is not a listen address (host:port, e.g. 127.0.0.1:9000)"
+        ));
+    }
+    Ok((host.to_string(), port))
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct OutputSettings {
@@ -144,12 +162,25 @@ pub(super) fn resolve_output(
         ));
     }
     let mut sinks = Vec::new();
+    // Listen addresses so far, to catch two TCP outputs on one address (only one can listen).
+    let mut binds: Vec<(String, u16, &str)> = Vec::new();
     for (name, kind) in &output.sinks {
         let kind = match kind {
             SinkKind::Stdout => SinkKind::Stdout,
             SinkKind::Tcp { bind } => {
-                if bind.trim().is_empty() {
-                    errors.push(format!("output.sinks.{name}.bind must not be empty"));
+                match parse_bind(bind) {
+                    Ok((host, port)) => {
+                        if let Some((_, _, other)) =
+                            binds.iter().find(|(h, p, _)| *p != 0 && *p == port && *h == host)
+                        {
+                            errors.push(format!(
+                                "output.sinks.{name}.bind: '{bind}' is also output.sinks.{other}.bind \
+                                 (only one output can listen on an address)"
+                            ));
+                        }
+                        binds.push((host, port, name));
+                    }
+                    Err(error) => errors.push(format!("output.sinks.{name}.bind: {error}")),
                 }
                 SinkKind::Tcp { bind: bind.clone() }
             }

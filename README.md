@@ -138,7 +138,7 @@ Open it in the app, or run it with `cargo run --bin shopfloor -- run scenarios/s
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | stdout, TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | stdout, TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | stdout, TCP |
-| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing cell (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
+| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing shopfloor (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size: machines and MMs are drawn to scale, and text and markers scale with the floor so they stay
@@ -282,10 +282,10 @@ topic says which events it carries, so a subscriber takes only the part of the s
 type = "mqtt"
 broker = "127.0.0.1:1883"
 
-# Sensor readings and sensor changes, and nothing else.
+# Sensor readings, and nothing else (`kinds` can list several, e.g. ["sensor", "sensor_set"]).
 [[output.sinks.mqtt.topics]]
 topic = "shopfloor/sensors"
-kinds = ["sensor", "sensor_set"]
+kinds = ["sensor"]
 
 # Everything about mm1.
 [[output.sinks.mqtt.topics]]

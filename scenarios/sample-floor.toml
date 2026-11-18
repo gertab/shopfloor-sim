@@ -8,6 +8,7 @@
 name = "Shopfloor example"
 
 [sim]
+start_paused = true
 tick_ms = 20             # fixed engine step
 seed = 42                # sensor-noise RNG seed (runs are reproducible)
 dock_tolerance_m = 0.9   # an MM this close to a dock is "at" that machine

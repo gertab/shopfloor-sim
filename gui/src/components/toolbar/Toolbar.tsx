@@ -12,7 +12,7 @@ import {
 import { formatSimTime } from "../../format";
 import type { Control, MqttTopic, Scenario, WorldState } from "../../types";
 
-/** "shopfloor/sensors ← sensor, sensor_set" for a badge tooltip. */
+/** "shopfloor/sensors ← sensor" for a badge tooltip. */
 function describeTopic({ topic, kinds, entities }: MqttTopic): string {
   const filters = [...kinds, ...entities];
   return `${topic} ← ${filters.length > 0 ? filters.join(", ") : "every event"}`;

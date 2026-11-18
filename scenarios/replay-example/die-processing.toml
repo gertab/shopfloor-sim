@@ -1,4 +1,4 @@
-# A die-processing cell, with Liminal Desk traces to replay on it (see "Replaying Liminal Desk traces" in the README).
+# A die-processing shopfloor, with Liminal Desk traces to replay on it (see "Replaying Liminal Desk traces" in the README).
 #
 # Dies go from the stocker to the bonder, the encaser and the deflasher, and back to the stocker each time,
 # carried by two mobile manipulators. The ids match the traces' `device_id`, `target`, `source` and
@@ -11,7 +11,7 @@
 #
 # Units: metres, seconds.
 
-name = "Die processing cell"
+name = "Die processing shopfloor"
 
 [sim]
 tick_ms = 20
