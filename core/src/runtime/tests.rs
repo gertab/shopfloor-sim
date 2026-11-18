@@ -263,3 +263,36 @@ async fn spawn_fails_when_a_sink_cannot_open() {
     let error = SimRuntime::spawn(Engine::new(scenario)).err().unwrap();
     assert!(format!("{error:#}").contains("Failed to"));
 }
+
+/// Outputs that fail to open close the sinks they had opened before returning, so what those hold
+/// (a port) is free at once: the app then opens the previous scenario's outputs again.
+#[tokio::test]
+async fn outputs_that_fail_to_open_free_what_they_opened() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    // The TCP sink opens first (sinks open in name order), then the JSONL one fails.
+    let scenario = parse_scenario(
+        &format!(
+            r#"
+            [floor]
+            width_m = 10.0
+            height_m = 5.0
+
+            [output.sinks.a_tcp]
+            type = "tcp"
+            bind = "127.0.0.1:{port}"
+
+            [output.sinks.b_rec]
+            type = "jsonl"
+            path = "/dev/null/not-a-dir/x.jsonl"
+            "#
+        ),
+        None,
+    )
+    .unwrap();
+    assert!(Outputs::open(&scenario).is_err());
+    std::net::TcpListener::bind(("127.0.0.1", port)).expect("the port is free again");
+}

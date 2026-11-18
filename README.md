@@ -64,7 +64,7 @@ Without `--scene` or `--duration`, a real-time run continues until Ctrl+C. The b
 (`cargo build --release --bin shopfloor` for an optimised one). `shopfloor replay` plays traces instead of simulating:
 see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 
-## Using the app
+<!-- ## Using the app
 
 | Do | How |
 |---|---|
@@ -77,7 +77,7 @@ see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 | Pause | **Pause** in the toolbar, or **Space**. |
 | Play a scene | **Scenes** at the top right: **Play** / **Stop**. Each track shows what it waits on, and the toolbar shows the scene and its iteration. Pause applies to the scene too, and manual control still works. |
 | Inspect the output | The bottom panel shows every event. Filter by entity, or by group: **position**, **sensor** (readings), **event** (moves, arrivals, stops and actions) and **sim** (the simulation, scenes and sensor changes). **{}** shows the raw JSON lines that the outputs write. |
-| Start again, switch scenario | **Reload** re-reads the scenario file and starts again from time 0, and outputs reconnect. **Open** loads another scenario (the picker starts in `scenarios/`). |
+| Start again, switch scenario | **Reload** re-reads the scenario file and starts again from time 0, and outputs reconnect. **Open** loads another scenario (the picker starts in `scenarios/`). | -->
 
 ## Scenario files
 
@@ -291,7 +291,8 @@ output to any scenario.
   aren't kept, so a client only sees what happens after it connects.
 - **Status:** the toolbar's `tcp` badge shows the client count. The CLI logs connects and disconnects.
 - **One process per port:** the app and a real-time CLI run of the same scenario can't both listen; the second fails
-  with "Failed to listen on 127.0.0.1:9000". Change `bind` (or use `--tcp`) to run both.
+  with "Failed to listen on 127.0.0.1:9000". Change `bind` (or use `--tcp`) to run both. If the app's **Open** or
+  **Reload** fails this way, the app starts the scenario it had again.
 
 For a stream processor consuming it, see [Example: Liminal](#example-liminal).
 

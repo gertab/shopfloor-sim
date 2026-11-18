@@ -93,10 +93,62 @@ impl Running {
         (scenario, self.outputs)
     }
 
-    /// Stops everything, outputs included.
-    async fn stop(self) {
-        let (_, outputs) = self.stop_runtime().await;
+    /// Stops everything, outputs included. Returns the scenario it ran.
+    async fn stop(self) -> Arc<Scenario> {
+        let (scenario, outputs) = self.stop_runtime().await;
         outputs.close().await;
+        scenario
+    }
+}
+
+/// Opens a scenario's outputs and simulates it from the start.
+fn start_simulation(app: &AppHandle, scenario: &Arc<Scenario>) -> anyhow::Result<Running> {
+    let outputs = Outputs::open(scenario)?;
+    let runtime = Runtime::Sim(SimRuntime::spawn_with(
+        Engine::new(Arc::clone(scenario)),
+        outputs.writer(),
+    ));
+    Ok(Running::new(app.clone(), runtime, outputs))
+}
+
+/// What [`start_or_restore`] ended up running.
+enum Loaded<T> {
+    /// The new scenario.
+    Started(T),
+    /// The new scenario couldn't start (the error says why), so the previous one runs again.
+    Restored(T, String),
+    /// Nothing could start.
+    Failed(String),
+}
+
+/// Starts `scenario` with `start`. If it can't start (e.g. a port of its outputs is in use) and
+/// `previous` ran until now, starts that again, from the beginning, so that something runs.
+fn start_or_restore<T>(
+    scenario: &Arc<Scenario>,
+    previous: Option<&Arc<Scenario>>,
+    start: impl Fn(&Arc<Scenario>) -> anyhow::Result<T>,
+) -> Loaded<T> {
+    let error = match start(scenario) {
+        Ok(started) => return Loaded::Started(started),
+        Err(error) => format!("{error:#}"),
+    };
+    let Some(previous) = previous else {
+        return Loaded::Failed(error);
+    };
+    match start(previous) {
+        Ok(restored) => {
+            tracing::warn!(
+                "'{}' could not start, so '{}' runs again: {error}",
+                scenario.name,
+                previous.name
+            );
+            let message = format!("{error}\nBack to '{}', started again.", previous.name);
+            Loaded::Restored(restored, message)
+        }
+        Err(again) => Loaded::Failed(format!(
+            "{error}\n'{}' could not start again either: {again:#}",
+            previous.name
+        )),
     }
 }
 
@@ -132,7 +184,8 @@ pub(crate) fn default_scenario_path() -> String {
 
 /// Loads a scenario (default: `scenarios/sample-floor.toml`) and (re)starts the simulation with it.
 /// A scenario's `[replay]` only sets what the Replay section starts with: replays start from there
-/// (`start_replay`). If the file is invalid, the current run keeps going.
+/// (`start_replay`). If the file is invalid, the current run keeps going. If its outputs can't open
+/// (e.g. a port in use), the previous scenario starts again, so the app isn't left with nothing.
 #[tauri::command]
 pub(crate) async fn load_scenario(
     app: AppHandle,
@@ -145,18 +198,25 @@ pub(crate) async fn load_scenario(
     let scenario = Arc::new(shopfloor_core::load_scenario(&path).map_err(|e| format!("{e:#}"))?);
 
     let mut running = host.running.lock().await;
-    if let Some(previous) = running.take() {
-        previous.stop().await;
-    }
+    let previous = match running.take() {
+        Some(previous) => Some(previous.stop().await),
+        None => None,
+    };
     // Only now: the new outputs may need the ports the previous ones held.
-    let outputs = Outputs::open(&scenario).map_err(|e| format!("{e:#}"))?;
-    let runtime = Runtime::Sim(SimRuntime::spawn_with(
-        Engine::new(Arc::clone(&scenario)),
-        outputs.writer(),
-    ));
-    tracing::info!("loaded scenario '{}' from {}", scenario.name, path.display());
-    *running = Some(Running::new(app, runtime, outputs));
-    Ok((*scenario).clone())
+    match start_or_restore(&scenario, previous.as_ref(), |scenario| {
+        start_simulation(&app, scenario)
+    }) {
+        Loaded::Started(started) => {
+            tracing::info!("loaded scenario '{}' from {}", scenario.name, path.display());
+            *running = Some(started);
+            Ok((*scenario).clone())
+        }
+        Loaded::Restored(restored, error) => {
+            *running = Some(restored);
+            Err(error)
+        }
+        Loaded::Failed(error) => Err(error),
+    }
 }
 
 /// Replays these trace files on the loaded scenario's layout, replacing what runs now. Returns
@@ -357,6 +417,64 @@ mod tests {
         );
         assert!(runtime.control(Control::Pause).await.is_ok());
         runtime.shutdown().await;
+    }
+
+    /// A scenario named `name`, with a TCP output listening on `bind` if given.
+    fn scenario_listening_on(name: &str, bind: Option<&str>) -> Arc<Scenario> {
+        let output = bind.map_or_else(String::new, |bind| {
+            format!("[output.sinks.tcp]\ntype = \"tcp\"\nbind = \"{bind}\"\n")
+        });
+        let text = format!("name = \"{name}\"\n[floor]\nwidth_m = 10.0\nheight_m = 5.0\n{output}");
+        Arc::new(shopfloor_core::parse_scenario(&text, None).unwrap())
+    }
+
+    #[tokio::test]
+    async fn a_scenario_whose_port_is_taken_brings_the_previous_one_back() {
+        // Another process (e.g. a CLI run) listens on the new scenario's port.
+        let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let bind = taken.local_addr().unwrap().to_string();
+        let previous = scenario_listening_on("Previous", Some("127.0.0.1:0"));
+        let next = scenario_listening_on("Next", Some(&bind));
+
+        match start_or_restore(&next, Some(&previous), |scenario| Outputs::open(scenario)) {
+            Loaded::Restored(outputs, error) => {
+                assert!(
+                    error.starts_with(&format!("Failed to listen on {bind}")),
+                    "{error}"
+                );
+                assert!(error.ends_with("\nBack to 'Previous', started again."), "{error}");
+                outputs.close().await;
+            }
+            _ => panic!("expected the previous scenario to run again"),
+        }
+        match start_or_restore(&next, None, |scenario| Outputs::open(scenario)) {
+            Loaded::Failed(error) => assert!(error.starts_with("Failed to listen on"), "{error}"),
+            _ => panic!("with no previous scenario, nothing runs"),
+        }
+
+        drop(taken);
+        match start_or_restore(&next, Some(&previous), |scenario| Outputs::open(scenario)) {
+            Loaded::Started(outputs) => outputs.close().await,
+            _ => panic!("with the port free, the new scenario starts"),
+        }
+    }
+
+    #[tokio::test]
+    async fn when_neither_scenario_can_start_both_reasons_are_given() {
+        let taken = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let bind = taken.local_addr().unwrap().to_string();
+        let previous = scenario_listening_on("Previous", Some(&bind));
+        let next = scenario_listening_on("Next", Some(&bind));
+        match start_or_restore(&next, Some(&previous), |scenario| Outputs::open(scenario)) {
+            Loaded::Failed(error) => {
+                assert!(error.starts_with("Failed to listen on"), "{error}");
+                assert!(
+                    error.contains("\n'Previous' could not start again either: Failed to listen on"),
+                    "{error}"
+                );
+            }
+            _ => panic!("expected nothing to run"),
+        }
     }
 
     #[test]

@@ -152,11 +152,23 @@ export function useSimulation(): Simulation {
       clearEvents();
       setFinishedReplay(null);
       replayLeftRef.current = true;
-      await reportErrors(async () => {
+      const loaded = await reportErrors(async () => {
         setScenario(await api.loadScenario(path));
         setWorld(await api.getState());
         setError(null);
+        return true;
       });
+      if (!loaded) {
+        // The run may have changed anyway: the previous scenario started again (its outputs reopened)
+        // or nothing runs. Show what does, keeping the scenario object if it is the same one.
+        try {
+          const running = await api.getScenario();
+          setScenario((current) => (JSON.stringify(current) === JSON.stringify(running) ? current : running));
+          setWorld(await api.getState());
+        } catch {
+          // Keep what is shown; the load error is already on screen.
+        }
+      }
       setLoading(false);
     },
     [clearEvents, reportErrors],

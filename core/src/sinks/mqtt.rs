@@ -11,7 +11,7 @@ use crate::scenario::{MqttTopic, parse_broker};
 use anyhow::{anyhow, bail};
 use rumqttc::{Client, Connection, Event, MqttOptions, Outgoing, Packet, QoS};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -20,7 +20,8 @@ const QUEUE_CAPACITY: usize = 4096;
 /// Wait between connection attempts while the broker can't be reached.
 const RETRY: Duration = Duration::from_secs(1);
 const STOP_POLL: Duration = Duration::from_millis(20);
-/// How long `close` waits for queued events to go out before leaving the event loop to finish.
+/// How long `close` waits for queued events to go out (and, at QoS 1 and 2, to be acknowledged)
+/// before leaving the event loop to finish.
 const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct MqttSink {
@@ -33,6 +34,8 @@ pub struct MqttSink {
     monitor: SinkMonitor,
     /// Publishes are being dropped because the queue is full (warned about once per episode).
     queue_full: bool,
+    /// QoS 1 and 2 publishes handed to the client, each done once the broker acknowledges it.
+    published: u64,
 }
 
 struct Shared {
@@ -40,6 +43,8 @@ struct Shared {
     /// Publishes are accepted: connected, or the first attempt is still under way.
     open: AtomicBool,
     stop: AtomicBool,
+    /// QoS 1 and 2 publishes the broker has acknowledged (PUBACK, PUBCOMP).
+    acked: AtomicU64,
 }
 
 impl Shared {
@@ -48,6 +53,7 @@ impl Shared {
             connected: AtomicBool::new(false),
             open: AtomicBool::new(true),
             stop: AtomicBool::new(false),
+            acked: AtomicU64::new(0),
         }
     }
 }
@@ -97,6 +103,7 @@ impl MqttSink {
             event_loop: Some(event_loop),
             monitor,
             queue_full: false,
+            published: 0,
         })
     }
 }
@@ -135,6 +142,9 @@ fn run_event_loop(
                 outage_logged = false;
                 monitor.set(name, format!("connected to {address}"));
                 tracing::info!("sink '{name}': connected to MQTT broker {address}");
+            }
+            Ok(Ok(Event::Incoming(Packet::PubAck(_) | Packet::PubComp(_)))) => {
+                shared.acked.fetch_add(1, Ordering::Relaxed);
             }
             Ok(Ok(Event::Outgoing(Outgoing::Disconnect))) => break,
             Ok(Ok(_)) => {}
@@ -184,7 +194,12 @@ impl EventSink for MqttSink {
             let payload = message.json.clone();
             for topic in topics {
                 match client.try_publish(topic, self.qos, false, payload.clone()) {
-                    Ok(()) => self.queue_full = false,
+                    Ok(()) => {
+                        self.queue_full = false;
+                        if self.qos != QoS::AtMostOnce {
+                            self.published += 1;
+                        }
+                    }
                     Err(error) => {
                         if !self.queue_full {
                             tracing::warn!("sink '{}': dropping events ({error})", self.name);
@@ -200,12 +215,21 @@ impl EventSink for MqttSink {
 
     fn close(&mut self) -> std::io::Result<()> {
         self.shared.stop.store(true, Ordering::Relaxed);
+        let deadline = Instant::now() + CLOSE_TIMEOUT;
+        // At QoS 1 and 2 a message is only safe once the broker has acknowledged it: at QoS 2 a
+        // broker may hold it back until the last step of the handshake, which a disconnect right
+        // behind it would cut short. Not while the broker is away: no acknowledgement would come.
+        while self.shared.open.load(Ordering::Relaxed)
+            && self.shared.acked.load(Ordering::Relaxed) < self.published
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(STOP_POLL);
+        }
         if let Some(client) = self.client.take() {
             // Goes out after whatever is still queued; then the event loop ends.
             let _ = client.try_disconnect();
         }
         if let Some(event_loop) = self.event_loop.take() {
-            let deadline = Instant::now() + CLOSE_TIMEOUT;
             while !event_loop.is_finished() && Instant::now() < deadline {
                 std::thread::sleep(STOP_POLL);
             }
@@ -428,6 +452,57 @@ mod tests {
         sink.close().unwrap();
         assert_eq!(read_packet(&mut stream).0, 0xe0, "DISCONNECT");
         assert!(monitor.snapshot().is_empty());
+    }
+
+    /// Plays a QoS 2 broker until the client disconnects: answers each PUBLISH with PUBREC and each
+    /// PUBREL with PUBCOMP. Returns the payloads in the order they were released, which is when a
+    /// broker such as Mosquitto passes them on to subscribers.
+    fn released_at_qos_2(mut stream: TcpStream) -> Vec<String> {
+        let mut pending = std::collections::HashMap::new();
+        let mut released = Vec::new();
+        loop {
+            let (header, body) = read_packet(&mut stream);
+            match header >> 4 {
+                3 => {
+                    assert_eq!(header & 0x06, 0x04, "QoS 2 PUBLISH");
+                    let length = usize::from(u16::from_be_bytes([body[0], body[1]]));
+                    let id = [body[2 + length], body[3 + length]];
+                    let payload = String::from_utf8(body[4 + length..].to_vec()).unwrap();
+                    pending.insert(id, payload);
+                    stream.write_all(&[0x50, 0x02, id[0], id[1]]).unwrap(); // PUBREC
+                }
+                6 => {
+                    let id = [body[0], body[1]];
+                    released.push(pending.remove(&id).expect("PUBREL of a pending PUBLISH"));
+                    stream.write_all(&[0x70, 0x02, id[0], id[1]]).unwrap(); // PUBCOMP
+                }
+                12 => stream.write_all(&[0xd0, 0x00]).unwrap(), // PINGREQ: PINGRESP
+                14 => return released,                          // DISCONNECT
+                other => panic!("unexpected packet type {other}"),
+            }
+        }
+    }
+
+    #[test]
+    fn closing_waits_until_qos_2_messages_are_delivered() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let broker = listener.local_addr().unwrap().to_string();
+        let monitor = SinkMonitor::default();
+        let topics = [topic("shopfloor/all", &[], &[])];
+        let mut sink = MqttSink::connect("mqtt", &broker, &topics, 2, None, monitor.clone()).unwrap();
+        let stream = accept_client(&listener);
+        wait_for_status(&monitor, "connected to");
+        let broker = std::thread::spawn(move || released_at_qos_2(stream));
+
+        let batch: Vec<Message> = (1..=5).map(sim_started).collect();
+        sink.write_batch(&batch).unwrap();
+        sink.close().unwrap();
+        let sent: Vec<String> = batch.into_iter().map(|message| message.json).collect();
+        assert_eq!(
+            broker.join().unwrap(),
+            sent,
+            "every message released, the last one included"
+        );
     }
 
     #[test]

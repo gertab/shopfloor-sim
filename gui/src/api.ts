@@ -10,6 +10,8 @@ export const api = {
   startReplay: (paths: string[], envelope: boolean, positions: boolean) =>
     invoke<string[]>("start_replay", { paths, envelope, positions }),
   stopReplay: () => invoke<void>("stop_replay"),
+  /** The scenario that runs now, if any. */
+  getScenario: () => invoke<Scenario | null>("get_scenario"),
   getState: () => invoke<WorldState | null>("get_state"),
   sendCommand: (command: SimCommand) => invoke<void>("send_command", { command }),
   control: (control: Control) => invoke<void>("control_sim", { control }),

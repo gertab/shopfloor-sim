@@ -438,7 +438,7 @@ fn the_die_processing_traces_fit_their_scenario() {
 #[test]
 fn the_inspection_traces_fit_their_scenario() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../scenarios/replay-inspection/inspection-cell.toml");
+        .join("../scenarios/replay-example-2/inspection-cell.toml");
     let scenario = Arc::new(crate::scenario::load_scenario(&path).unwrap());
     let traces = scenario.replay.as_ref().unwrap().traces.clone();
     assert_eq!(traces.len(), 3);

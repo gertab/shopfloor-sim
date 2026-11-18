@@ -20,15 +20,27 @@ pub struct OutputWriter {
 }
 
 impl Outputs {
-    /// Opens the scenario's sinks. Must be called inside a tokio runtime.
+    /// Opens the scenario's sinks. Must be called inside a tokio runtime. If one can't open, those
+    /// already open are closed first, so what they hold (e.g. a port) is free when this returns.
     pub fn open(scenario: &Scenario) -> anyhow::Result<Self> {
-        let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let monitor = SinkMonitor::default();
-        let mut sinks = Vec::new();
+        let mut opened = Vec::new();
         for def in &scenario.output.sinks {
-            let sink = build_sink(def, &monitor)?;
-            sinks.push(spawn_sink(def.name.clone(), sink, sender.subscribe()));
+            match build_sink(def, &monitor) {
+                Ok(sink) => opened.push((def.name.clone(), sink)),
+                Err(error) => {
+                    for (_, mut sink) in opened {
+                        let _ = sink.close();
+                    }
+                    return Err(error);
+                }
+            }
         }
+        let (sender, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
+        let sinks = opened
+            .into_iter()
+            .map(|(name, sink)| spawn_sink(name, sink, sender.subscribe()))
+            .collect();
         Ok(Self {
             writer: OutputWriter { sender, monitor },
             sinks,
