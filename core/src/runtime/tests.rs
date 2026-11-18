@@ -25,6 +25,8 @@ fn scenario_recording_to(path: &Path) -> Arc<Scenario> {
         range = [0.0, 1.0]
         period_ms = 100
 
+        [actions.undock]
+
         [output.sinks.rec]
         type = "jsonl"
         path = '{}'
@@ -198,6 +200,8 @@ async fn shared_outputs_stay_open_across_runtimes() {
 
             [mobile_manipulators.mm1]
             start = [2.0, 3.0]
+
+            [actions.pick]
 
             [output.sinks.tcp]
             type = "tcp"

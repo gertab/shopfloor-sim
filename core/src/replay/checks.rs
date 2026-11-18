@@ -1,9 +1,14 @@
-//! Checking traces against the scenario. Nothing found here stops a replay: findings are warnings.
+//! Checking traces against the scenario.
+//!
+//! Everything a trace uses must be defined in the scenario (only `move` needs no action): its
+//! devices, actions, machines and sensors. Anything undefined is an error and stops the replay
+//! ([`check_payloads`]). What only concerns timing and order (timestamps, events that don't follow
+//! on) is a warning: the replay still runs.
 
 use super::Item;
 use crate::scenario::Scenario;
 
-/// Something in a trace that doesn't fit the scenario. The replay still runs.
+/// Something in a trace that doesn't fit the scenario: an error (see [`check_payloads`]) or a warning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {
     pub trace: String,
@@ -42,6 +47,15 @@ impl Findings {
         self.0
     }
 
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Every steps' count added up: how many payloads are affected.
+    pub(super) fn count(&self) -> usize {
+        self.0.iter().map(|finding| finding.steps.len().max(1)).sum()
+    }
+
     pub(super) fn add(&mut self, trace: &str, step: Option<usize>, message: String) {
         match self
             .0
@@ -58,7 +72,7 @@ impl Findings {
     }
 }
 
-/// Checks each payload on its own against the scenario.
+/// Checks that each payload uses only what the scenario defines. Everything found is an error.
 pub(super) fn check_payloads(
     scenario: &Scenario,
     timeline: &[Item],
@@ -77,6 +91,13 @@ pub(super) fn check_payloads(
             findings.add(trace, step, "payload is not a JSON object".into());
             continue;
         }
+        if item.kind.is_none() {
+            findings.add(
+                trace,
+                step,
+                "payload has neither an `event` nor a `type`, so it is neither an event nor a reading".into(),
+            );
+        }
         match &payload.device_id {
             None => findings.add(trace, step, "payload has no device_id".into()),
             Some(id) if !known_device(id) => {
@@ -85,7 +106,7 @@ pub(super) fn check_payloads(
             Some(_) => {}
         }
         if let Some(event) = &payload.event
-            && !matches!(event.as_str(), "move" | "dock" | "undock")
+            && event != "move"
             && scenario.action(event).is_none()
         {
             findings.add(
@@ -105,23 +126,13 @@ pub(super) fn check_payloads(
         if item.kind == Some("sensor")
             && let (Some(device), Some(sensor_type)) = (&payload.device_id, &payload.sensor_type)
         {
-            match item.sensor.map(|index| &scenario.sensors[index]) {
-                None => findings.add(
+            // Units aren't compared: a sensor that exists may label its readings differently.
+            if item.sensor.is_none() {
+                findings.add(
                     trace,
                     step,
                     format!("no '{sensor_type}' sensor on '{device}' in the scenario"),
-                ),
-                Some(sensor) => {
-                    if let Some(unit) = &payload.unit
-                        && unit != &sensor.unit
-                    {
-                        findings.add(
-                            trace,
-                            step,
-                            format!("unit '{unit}' differs from {}'s '{}'", sensor.id, sensor.unit),
-                        );
-                    }
-                }
+                );
             }
         }
     }

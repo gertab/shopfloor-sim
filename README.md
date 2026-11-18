@@ -138,7 +138,7 @@ Open it in the app, or run it with `cargo run --bin shopfloor -- run scenarios/s
 | [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | stdout, TCP, MQTT |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | stdout, TCP |
 | [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | stdout, TCP |
-| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing shopfloor (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
+| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing shopfloor (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it and the docking actions | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
 | [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
 
 The floor can be any size: machines and MMs are drawn to scale, and text and markers scale with the floor so they stay
@@ -456,12 +456,18 @@ section:
   them.
 
 Checks:
-- **Errors stop a replay.** A trace must be exactly `{"version": 1, "steps": [...]}` with at least one step, and each
-  step exactly `{"type": "send", "payload": ...}` or `{"type": "delay", "duration_ms": N}` with N a non-negative
-  integer. Errors name the file, the step and its line.
-- **Warnings** say where a trace doesn't fit the scenario, before a replay and in the app: unknown devices, machines,
-  sensors or actions; a different unit; a `timestamp_ms` that disagrees with the delays, or traces that start at
-  different times; events that don't follow on, such as a dock at a machine other than the move's destination.
+- **Errors stop a replay.**
+  - A trace must be exactly `{"version": 1, "steps": [...]}` with at least one step, and each step exactly
+    `{"type": "send", "payload": ...}` or `{"type": "delay", "duration_ms": N}` with N a non-negative integer. These
+    errors name the file, the step and its line.
+  - Everything a trace uses must be defined in the scenario: each payload is a JSON object with a `device_id` that is
+    a machine, an MM or a sensor; each `event` other than `move` is one of the scenario's actions (so `dock` and
+    `undock` need `[actions.dock]` / `[actions.undock]`); each `target`, `source` and `destination` is a machine; and
+    each reading's `device_id` + `type` is one of its sensors (on an MM, on a machine, or free-standing). Every problem
+    is listed together, with its file and step.
+- **Warnings** concern timing and order, and the replay still runs: a `timestamp_ms` that disagrees with the delays,
+  traces that start at different times, events that don't follow on (such as a dock at a machine other than the
+  move's destination). They're printed before a replay and shown in the app. Units aren't compared.
 
 ## Example: Liminal
 

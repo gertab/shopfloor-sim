@@ -8,7 +8,8 @@
 //! The payloads also drive the picture. On the scenario's layout, MMs glide out of a dock on
 //! `undock`, drive on `move` and glide in on `dock` (all three still count as actions or moves for
 //! routing), and sensor payloads update the scenario's sensors. Building that picture is also where
-//! a trace is checked against the scenario (see [`Finding`]).
+//! a trace is checked against the scenario (see [`Finding`]): everything it uses must be defined
+//! there, or the replay doesn't start.
 
 use crate::command::Control;
 use crate::engine::{ActionAvailability, MmView, MotionView, SensorView, WorldState};
@@ -115,8 +116,9 @@ impl Replay {
         Self::new(scenario, traces, options, start_ts)
     }
 
-    /// Builds a replay of `traces` on `scenario`, checking them against it. `start_ts` (epoch ms)
-    /// stamps what the replay adds if the traces carry no `timestamp_ms`.
+    /// Builds a replay of `traces` on `scenario`, checking them against it: an error if they use
+    /// anything the scenario doesn't define, otherwise the warnings (timing and order). `start_ts`
+    /// (epoch ms) stamps what the replay adds if the traces carry no `timestamp_ms`.
     pub fn new(
         scenario: Arc<Scenario>,
         traces: Vec<Trace>,
@@ -152,16 +154,22 @@ impl Replay {
             .collect();
         let trace_names: Vec<String> = traces.iter().map(|trace| trace.name.clone()).collect();
 
-        if options.format == Format::Envelope
-            && let Some(item) = timeline.iter().find(|item| !item.payload.is_object)
-        {
+        // Everything the traces use must be defined in the scenario.
+        let mut errors = Findings::default();
+        check_payloads(&scenario, &timeline, &trace_names, &mut errors);
+        if !errors.is_empty() {
+            let count = errors.count();
+            let list: Vec<String> = errors
+                .into_vec()
+                .iter()
+                .map(|error| format!("- {error}"))
+                .collect();
             bail!(
-                "{}: step {}: the envelope format needs JSON object payloads",
-                trace_names[item.trace],
-                item.step
+                "{count} {}: the traces use what the scenario doesn't define:\n{}",
+                if count == 1 { "problem" } else { "problems" },
+                list.join("\n")
             );
         }
-        check_payloads(&scenario, &timeline, &trace_names, &mut findings);
         let time_base = check_timestamps(&timeline, &trace_names, &mut findings);
         let mut command_ids = 0;
         let tracks = scenario

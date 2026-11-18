@@ -40,6 +40,10 @@ const SCENARIO: &str = r#"
 
     [actions.place]
     requires_machine = true
+
+    [actions.dock]
+
+    [actions.undock]
 "#;
 
 /// mm-1 picks at the stocker, carries the dies to the bonder and places them there.
@@ -223,29 +227,25 @@ fn the_envelope_adds_a_timestamp_only_when_the_payload_has_none() {
 }
 
 #[test]
-fn the_envelope_format_needs_object_payloads() {
-    let trace = r#"{"version": 1, "steps": [{"type": "send", "payload": {"a": 1}}, {"type": "send", "payload": [1, 2]}]}"#;
-    let options = ReplayOptions {
-        format: Format::Envelope,
-        positions: false,
-    };
-    let error = Replay::new(scenario(), traces(&[("t.json", trace)]), options, START_TS)
-        .err()
-        .unwrap();
-    assert_eq!(
-        error.to_string(),
-        "t.json: step 2: the envelope format needs JSON object payloads"
-    );
-    // The payload format sends anything.
-    assert!(
-        Replay::new(
-            scenario(),
-            traces(&[("t.json", trace)]),
-            ReplayOptions::default(),
-            START_TS
-        )
-        .is_ok()
-    );
+fn a_payload_that_is_not_an_object_stops_the_replay_in_either_format() {
+    let trace = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "pick"}},
+      {"type": "send", "payload": [1, 2]}
+    ]}"#;
+    for format in [Format::Payload, Format::Envelope] {
+        let options = ReplayOptions {
+            format,
+            positions: false,
+        };
+        let error = Replay::new(scenario(), traces(&[("t.json", trace)]), options, START_TS)
+            .err()
+            .unwrap();
+        assert_eq!(
+            error.to_string(),
+            "1 problem: the traces use what the scenario doesn't define:\n\
+             - t.json: step 2: payload is not a JSON object"
+        );
+    }
 }
 
 #[test]
@@ -437,8 +437,16 @@ fn messages_of(findings: &[Finding]) -> Vec<String> {
     findings.iter().map(Finding::to_string).collect()
 }
 
+/// The error `Replay::new` stops with, one line per problem.
+fn errors_of(scenario: Arc<Scenario>, texts: &[(&str, &str)]) -> Vec<String> {
+    let error = Replay::new(scenario, traces(texts), ReplayOptions::default(), START_TS)
+        .err()
+        .expect("the replay should be refused");
+    error.to_string().lines().map(str::to_string).collect()
+}
+
 #[test]
-fn findings_report_what_does_not_fit_the_scenario() {
+fn anything_the_scenario_does_not_define_stops_the_replay_all_listed() {
     let trace = r#"{"version": 1, "steps": [
       {"type": "send", "payload": "hello"},
       {"type": "send", "payload": {"event": "pick"}},
@@ -447,21 +455,91 @@ fn findings_report_what_does_not_fit_the_scenario() {
       {"type": "send", "payload": {"device_id": "mm-1", "event": "undock", "target": "oven"}},
       {"type": "send", "payload": {"type": "temperature", "device_id": "mm-1", "value": 3}},
       {"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 3, "unit": "g"}},
-      {"type": "send", "payload": {"device_id": "mm-2", "event": "pick"}}
+      {"type": "send", "payload": {"device_id": "mm-1"}},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "move", "source": "stocker", "destination": "kiln"}}
     ]}"#;
-    let (_, findings) = replay(&[("bad.json", trace)], ReplayOptions::default());
     assert_eq!(
-        messages_of(&findings),
+        errors_of(scenario(), &[("bad.json", trace)]),
         vec![
-            "bad.json: step 1: payload is not a JSON object",
-            "bad.json: step 2: payload has no device_id",
-            "bad.json: step 3: device 'mm-9' is not in the scenario",
-            "bad.json: step 4: event 'weld' is not one of the scenario's actions",
-            "bad.json: step 5: unknown machine 'oven'",
-            "bad.json: step 6: no 'temperature' sensor on 'mm-1' in the scenario",
-            "bad.json: step 7: unit 'g' differs from mm-1.vibration's 'm/s^2'",
-            "bad.json: step 8: mm-2 does 'pick' while not docked",
+            "8 problems: the traces use what the scenario doesn't define:",
+            "- bad.json: step 1: payload is not a JSON object",
+            "- bad.json: step 2: payload has no device_id",
+            "- bad.json: step 3: device 'mm-9' is not in the scenario",
+            "- bad.json: step 4: event 'weld' is not one of the scenario's actions",
+            "- bad.json: step 5: unknown machine 'oven'",
+            "- bad.json: step 6: no 'temperature' sensor on 'mm-1' in the scenario",
+            // Step 7 is fine: units aren't compared.
+            "- bad.json: step 8: payload has neither an `event` nor a `type`, so it is neither an event nor a reading",
+            "- bad.json: step 9: unknown machine 'kiln'",
         ]
+    );
+}
+
+#[test]
+fn dock_and_undock_must_be_defined_but_move_needs_no_action() {
+    let without = SCENARIO
+        .replace("[actions.dock]", "")
+        .replace("[actions.undock]", "");
+    let scenario = Arc::new(parse_scenario(&without, None).unwrap());
+    let trace = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "undock", "target": "stocker"}},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "move", "source": "stocker", "destination": "bonder"}},
+      {"type": "send", "payload": {"device_id": "mm-1", "event": "dock", "target": "bonder"}}
+    ]}"#;
+    assert_eq!(
+        errors_of(scenario, &[("t.json", trace)]),
+        vec![
+            "2 problems: the traces use what the scenario doesn't define:",
+            "- t.json: step 1: event 'undock' is not one of the scenario's actions",
+            "- t.json: step 3: event 'dock' is not one of the scenario's actions",
+        ]
+    );
+    // With them defined, the same trace replays without a finding.
+    let (_, findings) = replay(&[("t.json", trace)], ReplayOptions::default());
+    assert_eq!(findings, vec![]);
+}
+
+#[test]
+fn readings_of_machine_and_free_standing_sensors_are_found() {
+    let text = format!(
+        "{SCENARIO}\n[machines.bonder.sensors.temperature]\nunit = \"C\"\ndefault = 20.0\nrange = [0.0, 100.0]\n\n\
+         [sensors.humidity]\nposition = [6.0, 1.0]\ndefault = 40.0\nrange = [0.0, 100.0]\n"
+    );
+    let scenario = Arc::new(parse_scenario(&text, None).unwrap());
+    let trace = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"type": "temperature", "device_id": "bonder", "value": 25.5, "unit": "C"}},
+      {"type": "send", "payload": {"type": "humidity", "device_id": "humidity", "value": 44.0, "unit": "%"}}
+    ]}"#;
+    let (mut replay, findings) = Replay::new(
+        Arc::clone(&scenario),
+        traces(&[("s.json", trace)]),
+        ReplayOptions::default(),
+        START_TS,
+    )
+    .unwrap();
+    assert_eq!(findings, vec![]);
+    replay.start();
+    let value = |id: &str| {
+        replay
+            .state()
+            .sensors
+            .into_iter()
+            .find(|s| s.id == id)
+            .unwrap()
+            .last_value
+    };
+    assert_eq!(
+        (value("bonder.temperature"), value("humidity")),
+        (Some(25.5), Some(44.0))
+    );
+
+    // On a machine that doesn't have it, it is an error.
+    let wrong = r#"{"version": 1, "steps": [
+      {"type": "send", "payload": {"type": "temperature", "device_id": "stocker", "value": 25.5}}
+    ]}"#;
+    assert_eq!(
+        errors_of(scenario, &[("w.json", wrong)])[1],
+        "- w.json: step 1: no 'temperature' sensor on 'stocker' in the scenario"
     );
 }
 
@@ -516,12 +594,31 @@ fn findings_check_timestamps_against_the_delays_and_each_other() {
 
 #[test]
 fn repeated_findings_are_grouped() {
-    let send =
-        r#"{"type": "send", "payload": {"type": "vibration", "device_id": "mm-1", "value": 1, "unit": "g"}}"#;
-    let trace = format!(r#"{{"version": 1, "steps": [{}]}}"#, [send; 5].join(", "));
+    // A warning: every timestamp after the first disagrees with the delays.
+    let steps: Vec<String> = (0..5)
+        .map(|_| {
+            r#"{"type": "send", "payload": {"device_id": "mm-1", "event": "pick", "timestamp_ms": 1000}}"#
+                .to_string()
+        })
+        .collect();
+    let trace = format!(
+        r#"{{"version": 1, "steps": [{}]}}"#,
+        steps.join(r#", {"type": "delay", "duration_ms": 100}, "#)
+    );
     let (_, findings) = replay(&[("g.json", &trace)], ReplayOptions::default());
     assert_eq!(
         messages_of(&findings),
-        vec!["g.json: unit 'g' differs from mm-1.vibration's 'm/s^2' (5 times: steps 1, 2, 3, …)"]
+        vec!["g.json: timestamp_ms disagrees with the trace's delays (4 times: steps 3, 5, 7, …)"]
+    );
+
+    // An error: the same undefined action three times.
+    let send = r#"{"type": "send", "payload": {"device_id": "mm-1", "event": "weld"}}"#;
+    let trace = format!(r#"{{"version": 1, "steps": [{}]}}"#, [send; 3].join(", "));
+    assert_eq!(
+        errors_of(scenario(), &[("w.json", &trace)]),
+        vec![
+            "3 problems: the traces use what the scenario doesn't define:",
+            "- w.json: event 'weld' is not one of the scenario's actions (3 times: steps 1, 2, 3)",
+        ]
     );
 }
