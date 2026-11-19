@@ -82,7 +82,8 @@ see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 ## Scenario files
 
 A scenario is a TOML file in metres and seconds. (0, 0) is the floor's bottom-left corner, **y points up**, and
-headings are counter-clockwise from +x. **Unknown keys are errors**, and all errors are reported together.
+headings are in degrees counter-clockwise from facing right (0° = right, 90° = up). **Unknown keys are errors**, and
+all errors are reported together.
 
 [scenarios/small-floor.toml](scenarios/small-floor.toml) is a small example: two machines and one MM, with a sensor on
 the oven and one on the MM.
