@@ -1096,6 +1096,7 @@ h3 {
 
 .kind-chip .count {
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .event-rows {
