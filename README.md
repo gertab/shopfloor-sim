@@ -53,7 +53,7 @@ cargo run --bin shopfloor -- run scenarios/sample-floor.toml --scene production 
 ```
 
 | Option | Meaning |
-|---|---|
+| --- | --- |
 | `--scene ID` | Play this scene from the start. The run ends when the scene finishes (exit 0) or fails (exit 1). |
 | `--duration SECS` | Stop after this much simulation time. Required with `--fast` for a looping scene. |
 | `--fast` | Run as fast as possible. Events are still stamped as if in real time. TCP and MQTT outputs are skipped. |
@@ -72,7 +72,7 @@ see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 | Send it to a machine | With an MM selected, click the machine, or use the machine buttons on the MM's card. It drives to the machine's *dock* (the small circle). |
 | Send it to a point | With an MM selected, click anywhere on the floor. A ghost circle shows where it will stop. |
 | Re-target or stop | Give a new target while it moves, and the old move is replaced. **Stop** on its card stops it. |
-| Perform an action | The action buttons (Pick, Place, …) on the MM's card. A greyed-out button says why on hover (e.g. "'pick' needs mm1 at a machine"). Dock and Undock, if the scenario defines them, also move the MM (see [Docking](#docking)). |
+| Perform an action | The action buttons (Pick, Place, …) on the MM's card. A greyed-out button says why on hover (e.g. "'pick' needs mm1 at a machine"). Dock and Undock, if the scenario defines them, also move the MM. |
 | Change a sensor | **Sensors** on the right: a slider or number field, a button to restore the default, **noise σ** for Gaussian noise, and a pause button that stops its readings, as if it had failed. Click a reading, or a free-standing sensor's diamond, on the floor to jump to its control. Free-standing sensors are under **Floor**. |
 | Pause | **Pause** in the toolbar, or **Space**. |
 | Play a scene | **Scenes** at the top right: **Play** / **Stop**. Each track shows what it waits on, and the toolbar shows the scene and its iteration. Pause applies to the scene too, and manual control still works. |
@@ -81,8 +81,8 @@ see [Replaying Liminal Desk traces](#replaying-liminal-desk-traces).
 
 ## Scenario files
 
-A scenario is a TOML file, in metres and seconds. The origin is the floor's bottom-left corner, with **y pointing
-up**, and heading 0 is +x, counter-clockwise. **Unknown keys are errors**, and all errors are reported together.
+A scenario is a TOML file in metres and seconds. (0, 0) is the floor's bottom-left corner, **y points up**, and
+headings are counter-clockwise from +x. **Unknown keys are errors**, and all errors are reported together.
 
 [scenarios/small-floor.toml](scenarios/small-floor.toml) is a small example: two machines and one MM, with a sensor on
 the oven and one on the MM.
@@ -129,26 +129,21 @@ Open it in the app, or run it with `cargo run --bin shopfloor -- run scenarios/s
 
 ### Bundled scenarios
 
-[sample-floor.toml](scenarios/sample-floor.toml) is the larger, commented example.
-
-| Scenario | Setting | Floor | Scenes | Outputs |
-|---|---|---|---|---|
-| [basic.toml](scenarios/basic.toml) | The smallest useful floor: one MM, one machine, one sensor | 10×6 m | `visit_machine` | None |
-| [small-floor.toml](scenarios/small-floor.toml) | The example above: two machines and one MM, two sensors | 12×8 m | None | stdout |
-| [sample-floor.toml](scenarios/sample-floor.toml) | A factory cell: machines and mobile manipulators | 20×12 m | `production`, `vibration_fault`, `encaser_to_deflasher`, `sensor_dropout` | stdout, TCP, MQTT |
-| [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots | 24×14 m | `routine_rounds`, `cooling_failure` | stdout, TCP |
-| [container-port.toml](scenarios/container-port.toml) | A ship, quay cranes, a container yard and fast vehicles | 400×200 m | `container_flow`, `high_wind` | stdout, TCP |
-| [replay-example/die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing shopfloor (deflasher, encaser and bonder on the left, stocker on the right), with two traces to replay on it and the docking actions | 14×10 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `die-cell/`) |
-| [replay-example-2/inspection-cell.toml](scenarios/replay-example-2/inspection-cell.toml) | An inspection cell (loader, inspector, shelf), with three short traces to replay on it: one per MM and one for sensors, about 40 s | 14×9 m | None (its traces, in a `[replay]` section) | stdout, TCP, MQTT (topics under `inspection/`) |
-| [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | A factory cell for Liminal's scenario examples: noise exposure, temperature limits, anomalies, a stocker's level, … | 20×12 m | `shift` (all of them, 2 min), `production`, `noisy_period`, `deflasher_heat_spike`, `hall_draft`, `vibration_anomaly`, `lost_part`, `stocker_full_empty` | MQTT (topics under `factory/`) |
-
-The floor can be any size: machines and MMs are drawn to scale, and text and markers scale with the floor so they stay
-readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
+| Scenario | What it is |
+| --- | --- |
+| [basic.toml](scenarios/basic.toml) | The smallest useful floor: one machine, one MM, one sensor |
+| [small-floor.toml](scenarios/small-floor.toml) | The example above |
+| [sample-floor.toml](scenarios/sample-floor.toml) | The larger, commented example: a factory cell with scenes and every output type |
+| [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots |
+| [container-port.toml](scenarios/container-port.toml) | A 400×200 m port, showing that floors can be any size (set `grid_m` and `dock_tolerance_m` to match) |
+| [die-processing.toml](scenarios/replay-example/die-processing.toml) | A die-processing cell with two traces to [replay](#replaying-liminal-desk-traces) |
+| [inspection-cell.toml](scenarios/replay-example-2/inspection-cell.toml) | An inspection cell with three short traces to replay |
+| [proposed-liminal-scenarios.toml](scenarios/proposed-liminal-scenarios.toml) | Liminal's scenario examples (noise, heat, anomalies, …) as scenes, over MQTT |
 
 ### Reference
 
 | Key | Default | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `name` | "Untitled scenario" | Shown in the UI and in `sim` events |
 | `[sim] tick_ms` | 20 | Fixed engine step |
 | `[sim] seed` | 42 | Noise RNG seed (runs are reproducible) |
@@ -164,7 +159,7 @@ readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
 | `... max_speed_mps` | 0.5 | Driving speed (constant) |
 | `... radius_m` | 0.35 | Footprint. The MM's centre stays this far from the walls. |
 | `... actions` | all of `[actions]` | Ids of the actions this MM can perform |
-| `[actions.<id>]` | | An action MMs can perform. It is silent and only emits an `action` event. `dock` and `undock` are built in (see [Docking](#docking)). |
+| `[actions.<id>]` | | An action MMs can perform. It is silent and only emits an `action` event. `dock` and `undock` are built in (see the note below). |
 | `... label` | `<id>` humanised | Button label |
 | `... requires_machine` | false | Only at a machine (within `dock_tolerance_m` of its dock) |
 | `... allowed_while_moving` | false | Otherwise the MM must be stopped |
@@ -188,7 +183,8 @@ readable. On a large floor, set `grid_m` and `dock_tolerance_m` to match.
 | `... qos`, `client_id` | 0, `shopfloor-<name>-<process id>` | MQTT quality of service (0, 1 or 2) and client id |
 | `[[output.sinks.<name>.topics]]` `topic`, `kinds`, `entities` | filters: everything | A topic and the events it carries: those whose `kind` is in `kinds` and whose `device_id` is in `entities`. At least one topic is required. |
 
-Rules worth knowing:
+Some rules:
+
 - Entity ids use letters, digits, `_` and `-`.
 - Machines, MMs and free-standing sensors share one id namespace.
 - An action can't be called `move`, the `event` of move commands.
@@ -196,27 +192,9 @@ Rules worth knowing:
 - Only free-standing sensors have a `position`. A mounted sensor is where its host is.
 - Periods must be at least `tick_ms`.
 
-### Docking
-
-A move to a machine drives the MM onto its dock. A scenario can also define two built-in actions, which take only a
-`label`:
-
-```toml
-[actions.dock]
-label = "Dock"
-
-[actions.undock]
-```
-
-| Action | When | What it does |
-|---|---|---|
-| `dock` | The MM is stopped within 1 m of a machine's dock (or `dock_tolerance_m`, if larger) | Drives it onto that dock at its speed. Already on it: just the event. |
-| `undock` | The MM is stopped at a machine's dock | Drives it 1 m out, away from the machine and leaning to one side (alternating by MM), as in a replay |
-
-Both emit an `action` event (`event` `"dock"` / `"undock"`, `at` the machine). Until the MM gets there it counts as
-moving: `wait_idle` waits for it, a stop leaves it where it is, and a new move replaces it. Moves themselves emit no
-docking events, so a scene that wants a stream like the Liminal Desk traces performs them: move, `dock`, `pick`,
-`undock`, move.
+**Docking:** `dock` and `undock` are built-in action ids (only `label` is allowed). Besides the `action` event, `dock`
+drives a stopped MM within 1 m onto the machine's dock and `undock` drives it 1 m back out. Moves emit neither, so a
+scene that wants a Liminal Desk-style stream performs them itself: move, `dock`, `pick`, `undock`, move.
 
 ## Scenes
 
@@ -250,7 +228,7 @@ steps = [
 ```
 
 | Step | Does |
-|---|---|
+| --- | --- |
 | `move_to = { mm, machine }` or `{ mm, point = [x, y] }` | Send the MM somewhere (it does not wait for arrival) |
 | `wait_idle = "mm1"` | Wait until the MM has no move in progress (it arrived, or was stopped) |
 | `wait_ms = N` | Wait N ms of simulation time |
@@ -262,6 +240,7 @@ steps = [
 | `stop = "mm1"` | Stop the MM |
 
 How it plays:
+
 - Steps run in **simulation time**. Commands run as soon as their track reaches them, and a track only pauses at a
   wait. Pausing the simulation pauses the scene, and reloading stops it.
 - An **iteration** ends when every track has finished. With `loop` / `repeat`, the tracks then start again from where
@@ -350,7 +329,7 @@ Then subscribe to a topic, such as `shopfloor/sensors`, on `localhost:1883` with
 Every event is **one flat JSON object** with the same envelope:
 
 | Field | Meaning |
-|---|---|
+| --- | --- |
 | `v` | Schema version, currently `1` |
 | `seq` | Sequence number, +1 per event. It restarts when a scenario is loaded. |
 | `timestamp_ms` | Wall-clock time, epoch **milliseconds** (integer) |
@@ -358,14 +337,14 @@ Every event is **one flat JSON object** with the same envelope:
 | `kind` | One of the kinds below |
 
 | `kind` | When | Fields |
-|---|---|---|
+| --- | --- | --- |
 | `position` | Every `position_interval_ms` while an MM moves, plus once on arrival (with `speed_mps` 0). **Not emitted while idle.** | `device_id`, `x`, `y`, `heading_rad`, `speed_mps` |
 | `move_command` | An MM gets a target | `device_id`, `event` (`"move"`), `source`, `destination` (machine ids or null), `command_id`, `origin`, `from {x,y}`, `to {x,y}`, `distance_m`, `eta_ms`, `replaces` (previous `command_id` or null) |
 | `arrived` | An MM reaches its target | `device_id`, `command_id`, `x`, `y`, `at` |
 | `stopped` | An MM is stopped before arriving | `device_id`, `command_id`, `x`, `y`, `at`, `origin` |
 | `sensor` | Every `period_ms` per sensor | `sensor_id`, `device_id` (host, or the sensor itself if free-standing), `type` (the sensor's kind), `value`, `unit`, `x`, `y` (where the reading was taken: the MM's current position, the machine's centre, or the fixed position) |
 | `sensor_set` | A sensor's setpoint, noise or pause state is changed | `sensor_id`, `device_id`, `type`, `setpoint`, `noise_std`, `previous_setpoint`, `paused`, `origin` |
-| `action` | An MM performs an action (silent: nothing else changes, except that `dock` and `undock` move it, see [Docking](#docking)) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
+| `action` | An MM performs an action (silent: nothing else changes, except that `dock` and `undock` move it) | `device_id`, `event` (the action's id, e.g. `"pick"`), `object` (from the `perform` step, else null), `command_id` (shared with moves), `x`, `y`, `at`, `origin` |
 | `sim` | Started, paused, resumed or reset | `state`, `scenario` |
 | `scene` | A scene starts, restarts (next iteration), finishes, is stopped, or fails | `scene`, `state` (`started`/`restarted`/`finished`/`stopped`/`failed`), `iteration`, `error` (why it failed, else null) |
 
@@ -389,6 +368,7 @@ exception is lidar's `target`. The exact strings are pinned in [core/src/event.r
 removing or retyping a field bumps it.
 
 Notes for consumers:
+
 - Route on the top-level fields, starting with `kind`. No field is nested deeper than `from` / `to`.
 - Measurements (`x`, `y`, `value`, …) are always JSON floats, even when whole (`1.0`), so compare numbers with `>`,
   `<`, `>=`, `<=` rather than strict equality.
@@ -425,7 +405,7 @@ positions = false
 ```
 
 | Option | Meaning |
-|---|---|
+| --- | --- |
 | `TRACE...` | Trace files to play side by side. They replace the scenario's `[replay] traces`. |
 | `--format payload` | The default: each payload as written in the trace (same keys, order and number literals), on one line. |
 | `--format envelope` | The payload with `"v":1,"seq":N,"sim_ms":T,"kind":K` in front, plus `timestamp_ms` if it has none. |
@@ -433,6 +413,7 @@ positions = false
 | `--fast`, `--jsonl PATH`, `--tcp ADDR` | As for `run`. |
 
 How a replay works:
+
 - **Timing:** each trace's steps happen when its delays say. Several traces are merged on their delays, and ties go in
   the order the traces were given. The payloads' own `timestamp_ms` values are sent unchanged (liminal-desk-cli
   refreshes them as it sends).
@@ -451,6 +432,7 @@ How a replay works:
 
 In the app, the **Replay** section at the top of the right-hand panel is open when the scenario has a `[replay]`
 section:
+
 - **Traces** lists the files to play: **Add…** adds some, **×** removes one, and the order breaks ties. Changes
   aren't written back to the scenario file.
 - **Output** switches between `payload` and `envelope`, and **Positions** turns position reports on.
@@ -460,7 +442,9 @@ section:
   them.
 
 Checks:
+
 - **Errors stop a replay.**
+
   - A trace must be exactly `{"version": 1, "steps": [...]}` with at least one step, and each step exactly
     `{"type": "send", "payload": ...}` or `{"type": "delay", "duration_ms": N}` with N a non-negative integer. These
     errors name the file, the step and its line.
@@ -498,6 +482,7 @@ parameters = { broker_url = "mqtt://127.0.0.1:1883", topics = ["shopfloor/sensor
 ```
 
 Writing a pipeline:
+
 - `tcp_input` makes each whole frame the message payload and keeps no topic, so route on the event's fields, for
   example a `rule` with `condition = { field_path = "kind", operation = "equals", value = "sensor" }`.
 - Liminal's `equals` is strict (`1` ≠ `1.0`), and measurements are floats, so compare numbers with `>`, `<`, `>=`, `<=`.
@@ -505,8 +490,8 @@ Writing a pipeline:
 - Route actions on `event`, e.g. `event` equals `"pick"`. No action can be called `move`, so this matches only actions.
 
 How it behaves:
-- Liminal reconnects every second until the simulator is listening. It logs each failed attempt as an error, which is
-  harmless.
+
+- Liminal reconnects every second until the simulator is listening. It logs each failed attempt as an error.
 - `tcp_input` can lose its place in the stream if a frame is ever split across its 100 ms read timeout. That's rare on
   localhost, since the simulator writes each batch whole. If it happens, Liminal logs a parse error, or drops the
   connection and reconnects.
@@ -524,8 +509,6 @@ cd gui && npm run build     # TypeScript type-check + production bundle
   before the cargo commands.
 - `cargo test` also regenerates the app's TypeScript types in `gui/src/bindings/` from the Rust ones, so commit them
   with the Rust change that caused them.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above on every push and pull request, and
-  fails if the bindings are out of date.
 
 ### Architecture
 
@@ -597,7 +580,7 @@ After a change to a type the app receives, run `cargo test` to regenerate its Ty
 - **Another trace format:** parse it into `trace::Trace` (sends and delays). The replay, checks and animation then
   work as they are.
 
-## Todos
+### Todos
 
 - Richer scenes: steps triggered by other events, sensor ramps, labelled markers, random variation.
 - An obstacle-avoiding planner.
