@@ -399,7 +399,7 @@ Notes for consumers:
 ## Replaying Liminal Desk traces
 
 [Liminal Desk](https://github.com/duncanatt/liminal-desk-cli) traces are JSON files of `send` and `delay` steps. The
-simulator can play them on a scenario's layout instead of simulating: each payload goes to the scenario's outputs at
+simulator can play them on a scenario's layout: each payload goes to the scenario's outputs at
 the time the delays give, exactly as written in the trace. Nothing else is sent: no physics, no periodic sensor
 readings and, unless you ask, no position reports.
 
