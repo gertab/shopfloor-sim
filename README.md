@@ -5,7 +5,8 @@
 A desktop app and command-line tool that simulate a shop floor and stream everything that happens on it as JSON
 events. Use it to feed a stream processor, or to record data, without a real floor.
 
-![The app: the floor with its machines, mobile manipulators and sensors, their controls on the right, and the event log below](gui/screenshot.png)
+![The app playing scenarios/demo.toml: two mobile manipulators pass a part from Storage to Press to Packing, one taking a detour, while sensor readings update on the floor and events stream into the log below](gui/demo.gif)
+<!-- ![The app: the floor with its machines, mobile manipulators and sensors, their controls on the right, and the event log below](gui/screenshot.png) -->
 
 <!-- ## Features -->
 
@@ -134,6 +135,7 @@ Open it in the app, or run it with `cargo run --bin shopfloor -- run scenarios/s
 | --- | --- |
 | [basic.toml](scenarios/basic.toml) | The smallest useful floor: one machine, one MM, one sensor |
 | [small-floor.toml](scenarios/small-floor.toml) | The example above |
+| [demo.toml](scenarios/demo.toml) | The floor in the animation at the top: two MMs pass a part along a three-machine line |
 | [sample-floor.toml](scenarios/sample-floor.toml) | The larger, commented example: a factory cell with scenes and every output type |
 | [data-centre.toml](scenarios/data-centre.toml) | Server racks, cooling units and service robots |
 | [container-port.toml](scenarios/container-port.toml) | A 400×200 m port, showing that floors can be any size (set `grid_m` and `dock_tolerance_m` to match) |

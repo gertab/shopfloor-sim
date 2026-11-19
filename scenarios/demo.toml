@@ -1,0 +1,128 @@
+# The floor in the README's animation: a part travels Storage -> Press -> Packing, carried by two
+# mobile manipulators. The press heats up and gets louder while it works. Kept small and slow-reporting
+# so the event log stays readable; see sample-floor.toml for the other options.
+
+name = "Demo line"
+
+[floor]
+width_m = 12.0
+height_m = 7.0
+
+# --- Machines: docks default to 0.5 m below the footprint, so all three are serviced from y = 3.7 ---
+
+[machines.storage]
+label = "Storage"
+position = [2.0, 5.0]
+size = [2.2, 1.6]
+
+[machines.press]
+label = "Press"
+position = [6.0, 5.0]
+size = [2.2, 1.6]
+
+[machines.press.sensors.temperature]
+unit = "°C"
+default = 45.0
+range = [0.0, 150.0]
+period_ms = 2000
+noise_std = 0.3
+
+[machines.packing]
+label = "Packing"
+position = [10.0, 5.0]
+size = [2.2, 1.6]
+
+# --- Mobile manipulators ----------------------------------------------------------------------------
+
+[mobile_manipulators.mm1]
+label = "MM 1"
+start_at = "storage"
+max_speed_mps = 1.0
+
+[mobile_manipulators.mm2]
+label = "MM 2"
+start_at = "packing"
+max_speed_mps = 1.0
+
+[mobile_manipulators.mm2.sensors.vibration]
+unit = "g"
+default = 0.1
+range = [0.0, 2.0]
+period_ms = 1000
+noise_std = 0.01
+
+# --- A free-standing sensor below the press ---------------------------------------------------------
+
+[sensors.noise]
+label = "Noise level"
+position = [6.0, 1.5]
+kind = "sound"
+unit = "dB"
+default = 62.0
+range = [30.0, 120.0]
+period_ms = 2000
+noise_std = 0.5
+
+[actions.pick]
+requires_machine = true
+
+[actions.place]
+requires_machine = true
+
+# --- One loop, about 16 s: every iteration ends where it started ------------------------------------
+
+[scenes.production]
+label = "Make a part"
+loop = true
+
+[[scenes.production.tracks]]
+name = "MM 1: storage to press"
+steps = [
+  { perform = { mm = "mm1", action = "pick" } },
+  { wait_ms = 1000 },
+  { move_to = { mm = "mm1", machine = "press" } },
+  { wait_idle = "mm1" },
+  { perform = { mm = "mm1", action = "place" } },
+  { wait_ms = 1000 },
+  { move_to = { mm = "mm1", machine = "storage" } },
+  { wait_idle = "mm1" },
+]
+
+[[scenes.production.tracks]]
+name = "Press"
+steps = [
+  { wait_ms = 5500 },
+  { set_sensor = { sensor = "press.temperature", value = 85.0 } },
+  { set_sensor = { sensor = "noise", value = 84.0 } },
+  { wait_ms = 4000 },
+  { set_sensor = { sensor = "press.temperature", value = 45.0 } },
+  { set_sensor = { sensor = "noise", value = 62.0 } },
+]
+
+# MM 2 takes the long way round to the press, through two points below the line, and vibrates more on
+# the way (rough floor). It comes back the direct way.
+[[scenes.production.tracks]]
+name = "MM 2: press to packing"
+steps = [
+  { wait_ms = 5000 },
+  { move_to = { mm = "mm2", point = [9.0, 2.4] } },
+  { set_sensor = { sensor = "mm2.vibration", value = 0.6 } },
+  { wait_idle = "mm2" },
+  { move_to = { mm = "mm2", point = [7.0, 2.4] } },
+  { wait_idle = "mm2" },
+  { move_to = { mm = "mm2", machine = "press" } },
+  { wait_idle = "mm2" },
+  { set_sensor = { sensor = "mm2.vibration", value = 0.1 } },
+  { perform = { mm = "mm2", action = "pick" } },
+  { wait_ms = 1000 },
+  { move_to = { mm = "mm2", machine = "packing" } },
+  { wait_idle = "mm2" },
+  { perform = { mm = "mm2", action = "place" } },
+  { wait_ms = 1000 },
+]
+
+[output]
+position_interval_ms = 1000
+
+[output.sinks.terminal]
+type = "stdout"
